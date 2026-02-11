@@ -86,6 +86,48 @@ describe("ThreadList", () => {
     );
   });
 
+  it("opens the menu on long press", () => {
+    vi.useFakeTimers();
+    const onSelectThread = vi.fn();
+    const onOpenThreadMenu = vi.fn();
+
+    const { container } = render(
+      <ThreadList
+        {...baseProps}
+        onSelectThread={onSelectThread}
+        onOpenThreadMenu={onOpenThreadMenu}
+      />,
+    );
+
+    const row = container.querySelector(".thread-row");
+    expect(row).toBeTruthy();
+    if (!row) {
+      throw new Error("Missing thread row");
+    }
+
+    fireEvent.pointerDown(row, {
+      pointerType: "touch",
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+
+    vi.advanceTimersByTime(600);
+
+    expect(onOpenThreadMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws-1",
+      "thread-1",
+      true,
+    );
+
+    // A long press should not trigger the default click action afterwards.
+    fireEvent.click(row);
+    expect(onSelectThread).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
   it("shows the more button and toggles expanded", () => {
     const onToggleExpanded = vi.fn();
     render(

@@ -1,7 +1,11 @@
-import type { CSSProperties, MouseEvent } from "react";
+import { useRef, type CSSProperties, type MouseEvent, type PointerEvent } from "react";
 import MoreHorizontal from "lucide-react/dist/esm/icons/more-horizontal";
 
 import type { ThreadSummary } from "../../../types";
+
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_MOVE_THRESHOLD_PX = 10;
+const LONG_PRESS_SUPPRESS_CLICK_RESET_MS = 1000;
 
 type ThreadStatusMap = Record<
   string,
@@ -68,6 +72,115 @@ export function ThreadList({
   onShowThreadMenu,
   onOpenThreadMenu,
 }: ThreadListProps) {
+  const longPressRef = useRef<{
+    timerId: number | null;
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    currentTarget: HTMLElement | null;
+  }>({
+    timerId: null,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    currentTarget: null,
+  });
+  const suppressNextClickRef = useRef(false);
+  const suppressResetTimerRef = useRef<number | null>(null);
+
+  const clearSuppressResetTimer = () => {
+    if (suppressResetTimerRef.current === null) {
+      return;
+    }
+    window.clearTimeout(suppressResetTimerRef.current);
+    suppressResetTimerRef.current = null;
+  };
+
+  const cancelLongPress = () => {
+    const state = longPressRef.current;
+    if (state.timerId !== null) {
+      window.clearTimeout(state.timerId);
+      state.timerId = null;
+    }
+    state.pointerId = null;
+    state.currentTarget = null;
+  };
+
+  const scheduleSuppressReset = () => {
+    clearSuppressResetTimer();
+    suppressResetTimerRef.current = window.setTimeout(() => {
+      suppressNextClickRef.current = false;
+      suppressResetTimerRef.current = null;
+    }, LONG_PRESS_SUPPRESS_CLICK_RESET_MS);
+  };
+
+  const startLongPress = (
+    event: PointerEvent,
+    threadId: string,
+    canPin: boolean,
+  ) => {
+    if (event.pointerType !== "touch") {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest(".thread-menu-trigger")) {
+      return;
+    }
+
+    cancelLongPress();
+    const state = longPressRef.current;
+    state.pointerId = event.pointerId;
+    state.startX = event.clientX;
+    state.startY = event.clientY;
+    state.currentTarget = event.currentTarget as HTMLElement;
+
+    state.timerId = window.setTimeout(() => {
+      const current = longPressRef.current;
+      if (!current.currentTarget) {
+        return;
+      }
+
+      current.timerId = null;
+      current.pointerId = null;
+
+      suppressNextClickRef.current = true;
+      scheduleSuppressReset();
+
+      onOpenThreadMenu(
+        {
+          preventDefault: () => {},
+          stopPropagation: () => {},
+          currentTarget: current.currentTarget,
+        } as unknown as MouseEvent,
+        workspaceId,
+        threadId,
+        canPin,
+      );
+    }, LONG_PRESS_MS);
+  };
+
+  const handleLongPressMove = (event: PointerEvent) => {
+    const state = longPressRef.current;
+    if (state.timerId === null || state.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const dx = event.clientX - state.startX;
+    const dy = event.clientY - state.startY;
+    if (dx * dx + dy * dy > LONG_PRESS_MOVE_THRESHOLD_PX ** 2) {
+      cancelLongPress();
+    }
+  };
+
+  const handleLongPressEnd = (event: PointerEvent) => {
+    const state = longPressRef.current;
+    if (state.pointerId !== event.pointerId) {
+      return;
+    }
+    cancelLongPress();
+  };
+
   const indentUnit = nested ? 10 : 14;
   const renderThreadRow = ({ thread, depth }: ThreadRow) => {
     const relativeTime = getThreadTime(thread);
@@ -91,7 +204,7 @@ export function ThreadList({
     const canPin = depth === 0;
     const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
 
-    return (
+	    return (
       <div
         key={thread.id}
         className={`thread-row ${
@@ -100,10 +213,23 @@ export function ThreadList({
             : ""
         }`}
         style={indentStyle}
-        onClick={() => onSelectThread(workspaceId, thread.id)}
+        onClick={(event) => {
+          if (suppressNextClickRef.current) {
+            event.preventDefault();
+            event.stopPropagation();
+            suppressNextClickRef.current = false;
+            clearSuppressResetTimer();
+            return;
+          }
+          onSelectThread(workspaceId, thread.id);
+        }}
         onContextMenu={(event) =>
           onShowThreadMenu(event, workspaceId, thread.id, canPin)
         }
+        onPointerDown={(event) => startLongPress(event, thread.id, canPin)}
+        onPointerMove={handleLongPressMove}
+        onPointerUp={handleLongPressEnd}
+        onPointerCancel={handleLongPressEnd}
         role="button"
         tabIndex={0}
         onKeyDown={(event) => {
