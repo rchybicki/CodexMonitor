@@ -13,6 +13,8 @@ val tauriProperties = Properties().apply {
     }
 }
 
+val keepNativeDebugSymbols = System.getenv("CODEXMONITOR_ANDROID_KEEP_DEBUG_SYMBOLS") == "1"
+
 android {
     compileSdk = 36
     namespace = "com.dimillian.codexmonitor.android"
@@ -30,13 +32,23 @@ android {
             isDebuggable = true
             isJniDebuggable = true
             isMinifyEnabled = false
-            packaging {                jniLibs.keepDebugSymbols.add("*/arm64-v8a/*.so")
-                jniLibs.keepDebugSymbols.add("*/armeabi-v7a/*.so")
-                jniLibs.keepDebugSymbols.add("*/x86/*.so")
-                jniLibs.keepDebugSymbols.add("*/x86_64/*.so")
+            if (keepNativeDebugSymbols) {
+                packaging {
+                    jniLibs.keepDebugSymbols.add("*/arm64-v8a/*.so")
+                    jniLibs.keepDebugSymbols.add("*/armeabi-v7a/*.so")
+                    jniLibs.keepDebugSymbols.add("*/x86/*.so")
+                    jniLibs.keepDebugSymbols.add("*/x86_64/*.so")
+                }
             }
         }
         getByName("release") {
+            // Keep local LAN / dev server connectivity for side-loaded builds.
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+
+            // Sign with the debug key so the release APK is installable without
+            // configuring a keystore. This repo distributes APKs outside Play.
+            signingConfig = signingConfigs.getByName("debug")
+
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

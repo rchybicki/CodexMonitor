@@ -13,6 +13,7 @@ AAB_ONLY=0
 OPEN_ANDROID_STUDIO=0
 CI_MODE=1
 SKIP_INIT=0
+FULL_DEBUG_SYMBOLS=0
 
 usage() {
   cat <<'EOF'
@@ -23,6 +24,7 @@ Builds Android artifacts (APK/AAB) using Tauri.
 Options:
   --target <abi>      Add target ABI (aarch64, armv7, i686, x86_64), repeatable
   --debug             Build debug artifacts
+  --full-debug-symbols Keep full native debug symbols (debug builds are otherwise stripped)
   --split-per-abi     Build split APK/AAB per ABI
   --apk-only          Build APKs only
   --aab-only          Build AABs only
@@ -41,6 +43,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --debug)
       DEBUG_MODE=1
+      shift
+      ;;
+    --full-debug-symbols)
+      FULL_DEBUG_SYMBOLS=1
       shift
       ;;
     --split-per-abi)
@@ -124,6 +130,22 @@ if [[ -z "$NPM_BIN" ]]; then
   echo "Unable to find npm in PATH or common install locations." >&2
   echo "Install Node/npm, or run from a shell where npm is available." >&2
   exit 1
+fi
+
+if [[ "$DEBUG_MODE" -eq 1 && "$FULL_DEBUG_SYMBOLS" -eq 0 ]]; then
+  # Debug APKs can easily become hundreds of MB due to Rust debuginfo embedded in
+  # the native `.so`. Strip debuginfo to make "debug distribution" builds usable.
+  if [[ "${RUSTFLAGS-}" != *"-C strip=debuginfo"* ]]; then
+    export RUSTFLAGS="${RUSTFLAGS-} -C strip=debuginfo"
+  fi
+
+  # Line-tables only is enough for backtraces while keeping size down.
+  if [[ -z "${CARGO_PROFILE_DEV_DEBUG-}" ]]; then
+    export CARGO_PROFILE_DEV_DEBUG=1
+  fi
+fi
+if [[ "$DEBUG_MODE" -eq 1 && "$FULL_DEBUG_SYMBOLS" -eq 1 ]]; then
+  export CODEXMONITOR_ANDROID_KEEP_DEBUG_SYMBOLS=1
 fi
 
 cmd=("$NPM_BIN" run tauri -- android build)
