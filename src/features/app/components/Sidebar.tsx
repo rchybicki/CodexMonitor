@@ -8,11 +8,15 @@ import type {
 } from "../../../types";
 import { createPortal } from "react-dom";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RefObject } from "react";
+import type { MouseEvent, RefObject } from "react";
 import { FolderOpen } from "lucide-react";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
+import Pin from "lucide-react/dist/esm/icons/pin";
 import Plus from "lucide-react/dist/esm/icons/plus";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import X from "lucide-react/dist/esm/icons/x";
 import {
   PopoverMenuItem,
@@ -39,6 +43,16 @@ import { formatRelativeTimeShort } from "../../../utils/time";
 const COLLAPSED_GROUPS_STORAGE_KEY = "codexmonitor.collapsedGroups";
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
 const ADD_MENU_WIDTH = 200;
+const THREAD_MENU_WIDTH = 220;
+
+type ThreadMenuAnchor = {
+  kind: "thread";
+  workspaceId: string;
+  threadId: string;
+  canPin: boolean;
+  top: number;
+  left: number;
+};
 
 type WorkspaceGroupSection = {
   id: string | null;
@@ -174,6 +188,9 @@ export const Sidebar = memo(function Sidebar({
     width: number;
   } | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
+  const [threadMenuAnchor, setThreadMenuAnchor] =
+    useState<ThreadMenuAnchor | null>(null);
+  const threadMenuRef = useRef<HTMLDivElement | null>(null);
   const { collapsedGroups, toggleGroupCollapse } = useCollapsedGroups(
     COLLAPSED_GROUPS_STORAGE_KEY,
   );
@@ -402,6 +419,12 @@ export const Sidebar = memo(function Sidebar({
     onClose: () => setAddMenuAnchor(null),
   });
 
+  useDismissibleMenu({
+    isOpen: Boolean(threadMenuAnchor),
+    containerRef: threadMenuRef,
+    onClose: () => setThreadMenuAnchor(null),
+  });
+
   useEffect(() => {
     if (!addMenuAnchor) {
       return;
@@ -416,10 +439,63 @@ export const Sidebar = memo(function Sidebar({
   }, [addMenuAnchor]);
 
   useEffect(() => {
+    if (!threadMenuAnchor) {
+      return;
+    }
+    function handleScroll() {
+      setThreadMenuAnchor(null);
+    }
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [threadMenuAnchor]);
+
+  useEffect(() => {
     if (!isSearchOpen && searchQuery) {
       setSearchQuery("");
     }
   }, [isSearchOpen, searchQuery]);
+
+  const openThreadMenu = useCallback(
+    (
+      event: MouseEvent,
+      workspaceId: string,
+      threadId: string,
+      canPin: boolean,
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setAddMenuAnchor(null);
+
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      const left = Math.min(
+        Math.max(rect.right - THREAD_MENU_WIDTH, 12),
+        window.innerWidth - THREAD_MENU_WIDTH - 12,
+      );
+      const top = rect.bottom + 8;
+
+      setThreadMenuAnchor({
+        kind: "thread",
+        workspaceId,
+        threadId,
+        canPin,
+        top,
+        left,
+      });
+    },
+    [],
+  );
+
+  const closeThreadMenu = useCallback(() => setThreadMenuAnchor(null), []);
+
+  const handleCopyThreadId = useCallback(async (threadId: string) => {
+    try {
+      await navigator.clipboard.writeText(threadId);
+    } catch {
+      // Clipboard failures are non-fatal here.
+    }
+  }, []);
 
   return (
     <aside
@@ -505,6 +581,7 @@ export const Sidebar = memo(function Sidebar({
                 isThreadPinned={isThreadPinned}
                 onSelectThread={onSelectThread}
                 onShowThreadMenu={showThreadMenu}
+                onOpenThreadMenu={openThreadMenu}
               />
             </div>
           )}
@@ -662,6 +739,7 @@ export const Sidebar = memo(function Sidebar({
                           onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
                           onSelectThread={onSelectThread}
                           onShowThreadMenu={showThreadMenu}
+                          onOpenThreadMenu={openThreadMenu}
                           onShowWorktreeMenu={showWorktreeMenu}
                           onToggleExpanded={handleToggleExpanded}
                           onLoadOlderThreads={onLoadOlderThreads}
@@ -686,6 +764,7 @@ export const Sidebar = memo(function Sidebar({
                           onLoadOlderThreads={onLoadOlderThreads}
                           onSelectThread={onSelectThread}
                           onShowThreadMenu={showThreadMenu}
+                          onOpenThreadMenu={openThreadMenu}
                         />
                       )}
                       {showThreadLoader && <ThreadLoading />}
@@ -725,6 +804,95 @@ export const Sidebar = memo(function Sidebar({
         onSwitchAccount={onSwitchAccount}
         onCancelSwitchAccount={onCancelSwitchAccount}
       />
+      {threadMenuAnchor?.kind === "thread" &&
+        createPortal(
+          <PopoverSurface
+            className="sidebar-thread-menu"
+            ref={threadMenuRef}
+            style={{
+              top: threadMenuAnchor.top,
+              left: threadMenuAnchor.left,
+              width: THREAD_MENU_WIDTH,
+            }}
+            role="menu"
+          >
+            <PopoverMenuItem
+              onClick={(event) => {
+                event.stopPropagation();
+                closeThreadMenu();
+                onRenameThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
+              }}
+              icon={<Pencil aria-hidden />}
+              role="menuitem"
+              data-tauri-drag-region="false"
+            >
+              Rename
+            </PopoverMenuItem>
+            <PopoverMenuItem
+              onClick={(event) => {
+                event.stopPropagation();
+                closeThreadMenu();
+                onSyncThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
+              }}
+              icon={<RefreshCw aria-hidden />}
+              role="menuitem"
+              data-tauri-drag-region="false"
+            >
+              Sync from server
+            </PopoverMenuItem>
+            {threadMenuAnchor.canPin ? (
+              (() => {
+                const isPinned = isThreadPinned(
+                  threadMenuAnchor.workspaceId,
+                  threadMenuAnchor.threadId,
+                );
+                return (
+                  <PopoverMenuItem
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeThreadMenu();
+                      if (isPinned) {
+                        unpinThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
+                      } else {
+                        pinThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
+                      }
+                    }}
+                    icon={<Pin aria-hidden />}
+                    role="menuitem"
+                    data-tauri-drag-region="false"
+                  >
+                    {isPinned ? "Unpin" : "Pin"}
+                  </PopoverMenuItem>
+                );
+              })()
+            ) : null}
+            <PopoverMenuItem
+              onClick={(event) => {
+                event.stopPropagation();
+                closeThreadMenu();
+                void handleCopyThreadId(threadMenuAnchor.threadId);
+              }}
+              icon={<Copy aria-hidden />}
+              role="menuitem"
+              data-tauri-drag-region="false"
+            >
+              Copy ID
+            </PopoverMenuItem>
+            <PopoverMenuItem
+              onClick={(event) => {
+                event.stopPropagation();
+                closeThreadMenu();
+                onDeleteThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
+              }}
+              icon={<Trash2 aria-hidden />}
+              role="menuitem"
+              data-tauri-drag-region="false"
+            >
+              Archive
+            </PopoverMenuItem>
+          </PopoverSurface>,
+          document.body,
+        )}
     </aside>
   );
 });

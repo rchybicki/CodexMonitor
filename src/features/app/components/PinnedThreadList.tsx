@@ -1,4 +1,5 @@
 import type { CSSProperties, MouseEvent } from "react";
+import MoreHorizontal from "lucide-react/dist/esm/icons/more-horizontal";
 
 import type { ThreadSummary } from "../../../types";
 
@@ -28,6 +29,12 @@ type PinnedThreadListProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onOpenThreadMenu: (
+    event: MouseEvent,
+    workspaceId: string,
+    threadId: string,
+    canPin: boolean,
+  ) => void;
 };
 
 export function PinnedThreadList({
@@ -40,6 +47,7 @@ export function PinnedThreadList({
   isThreadPinned,
   onSelectThread,
   onShowThreadMenu,
+  onOpenThreadMenu,
 }: PinnedThreadListProps) {
   return (
     <div className="thread-list pinned-thread-list">
@@ -97,7 +105,20 @@ export function PinnedThreadList({
             <div className="thread-meta">
               {relativeTime && <span className="thread-time">{relativeTime}</span>}
               <div className="thread-menu">
-                <div className="thread-menu-trigger" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="thread-menu-trigger"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenThreadMenu(event, workspaceId, thread.id, canPin);
+                  }}
+                  data-tauri-drag-region="false"
+                  aria-haspopup="menu"
+                  aria-label="Thread actions"
+                  title="Thread actions"
+                >
+                  <MoreHorizontal size={14} aria-hidden />
+                </button>
               </div>
             </div>
           </div>

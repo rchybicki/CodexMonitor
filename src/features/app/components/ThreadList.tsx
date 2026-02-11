@@ -1,4 +1,5 @@
 import type { CSSProperties, MouseEvent } from "react";
+import MoreHorizontal from "lucide-react/dist/esm/icons/more-horizontal";
 
 import type { ThreadSummary } from "../../../types";
 
@@ -37,6 +38,12 @@ type ThreadListProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onOpenThreadMenu: (
+    event: MouseEvent,
+    workspaceId: string,
+    threadId: string,
+    canPin: boolean,
+  ) => void;
 };
 
 export function ThreadList({
@@ -59,6 +66,7 @@ export function ThreadList({
   onLoadOlderThreads,
   onSelectThread,
   onShowThreadMenu,
+  onOpenThreadMenu,
 }: ThreadListProps) {
   const indentUnit = nested ? 10 : 14;
   const renderThreadRow = ({ thread, depth }: ThreadRow) => {
@@ -111,7 +119,20 @@ export function ThreadList({
         <div className="thread-meta">
           {relativeTime && <span className="thread-time">{relativeTime}</span>}
           <div className="thread-menu">
-            <div className="thread-menu-trigger" aria-hidden="true" />
+            <button
+              type="button"
+              className="thread-menu-trigger"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenThreadMenu(event, workspaceId, thread.id, canPin);
+              }}
+              data-tauri-drag-region="false"
+              aria-haspopup="menu"
+              aria-label="Thread actions"
+              title="Thread actions"
+            >
+              <MoreHorizontal size={14} aria-hidden />
+            </button>
           </div>
         </div>
       </div>

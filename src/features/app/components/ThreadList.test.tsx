@@ -39,18 +39,21 @@ const baseProps = {
   onLoadOlderThreads: vi.fn(),
   onSelectThread: vi.fn(),
   onShowThreadMenu: vi.fn(),
+  onOpenThreadMenu: vi.fn(),
 };
 
 describe("ThreadList", () => {
   it("renders active row and handles click/context menu", () => {
     const onSelectThread = vi.fn();
     const onShowThreadMenu = vi.fn();
+    const onOpenThreadMenu = vi.fn();
 
     render(
       <ThreadList
         {...baseProps}
         onSelectThread={onSelectThread}
         onShowThreadMenu={onShowThreadMenu}
+        onOpenThreadMenu={onOpenThreadMenu}
       />,
     );
 
@@ -67,6 +70,15 @@ describe("ThreadList", () => {
 
     fireEvent.contextMenu(row);
     expect(onShowThreadMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws-1",
+      "thread-1",
+      true,
+    );
+
+    const menuButton = screen.getByRole("button", { name: "Thread actions" });
+    fireEvent.click(menuButton);
+    expect(onOpenThreadMenu).toHaveBeenCalledWith(
       expect.anything(),
       "ws-1",
       "thread-1",
