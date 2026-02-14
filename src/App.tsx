@@ -113,6 +113,7 @@ import type {
   ComposerEditorSettings,
   WorkspaceInfo,
 } from "@/types";
+import { computePlanFollowupState } from "@/features/messages/utils/messageRenderUtils";
 import { OPEN_APP_STORAGE_KEY } from "@app/constants";
 import { useOpenAppIcons } from "@app/hooks/useOpenAppIcons";
 import { useAccountSwitching } from "@app/hooks/useAccountSwitching";
@@ -1189,6 +1190,42 @@ function MainApp() {
   const activeTurnId = activeThreadId
     ? activeTurnIdByThread[activeThreadId] ?? null
     : null;
+  const hasUserInputRequestForActiveThread = Boolean(
+    activeThreadId &&
+      userInputRequests.some(
+        (request) =>
+          request.params.thread_id === activeThreadId &&
+          (!activeWorkspaceId || request.workspace_id === activeWorkspaceId),
+      ),
+  );
+
+  const isPlanReadyAwaitingResponse = useMemo(() => {
+    return computePlanFollowupState({
+      threadId: activeThreadId,
+      items: activeItems,
+      isThinking: isProcessing,
+      hasVisibleUserInputRequest: hasUserInputRequestForActiveThread,
+    }).shouldShow;
+  }, [
+    activeItems,
+    activeThreadId,
+    hasUserInputRequestForActiveThread,
+    isProcessing,
+  ]);
+
+  const queueFlushPaused = Boolean(
+    appSettings.pauseQueuedMessagesWhenResponseRequired &&
+      activeThreadId &&
+      (hasUserInputRequestForActiveThread || isPlanReadyAwaitingResponse),
+  );
+
+  const queuePausedReason =
+    queueFlushPaused && hasUserInputRequestForActiveThread
+      ? "Paused — waiting for your answers."
+      : queueFlushPaused && isPlanReadyAwaitingResponse
+        ? "Paused — waiting for plan accept/changes."
+        : null;
+
   const {
     activeImages,
     attachImages,
@@ -1216,6 +1253,7 @@ function MainApp() {
     activeWorkspace,
     isProcessing,
     isReviewing,
+    queueFlushPaused,
     steerEnabled: appSettings.steerEnabled,
     appsEnabled: appSettings.experimentalAppsEnabled,
     connectWorkspace,
@@ -2085,6 +2123,7 @@ function MainApp() {
     onReviewPromptConfirmCustom: confirmCustom,
     activeTokenUsage,
     activeQueue,
+    queuePausedReason,
     draftText: activeDraft,
     onDraftChange: handleDraftChange,
     activeImages,
