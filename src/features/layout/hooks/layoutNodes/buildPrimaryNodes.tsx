@@ -257,6 +257,8 @@ export function buildPrimaryNodes(options: LayoutNodesOptions): PrimaryLayoutNod
       branches={options.branches}
       onCheckoutBranch={options.onCheckoutBranch}
       onCreateBranch={options.onCreateBranch}
+      canSyncThread={Boolean(options.activeWorkspace && options.activeThreadId)}
+      onSyncThread={options.onSyncActiveThread}
       canCopyThread={options.activeItems.length > 0}
       onCopyThread={options.onCopyThread}
       onToggleTerminal={options.onToggleTerminal}

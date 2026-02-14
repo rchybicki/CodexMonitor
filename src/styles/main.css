@@ -334,6 +334,19 @@
   filter: blur(0);
 }
 
+.main-header-icon-sync.is-spinning {
+  animation: main-header-sync-spin 0.8s linear infinite;
+}
+
+@keyframes main-header-sync-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .main-topbar {
   display: flex;
   justify-content: space-between;

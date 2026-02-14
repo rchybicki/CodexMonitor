@@ -212,6 +212,7 @@ export type LayoutNodesOptions = {
     pullRequest: GitHubPullRequest,
   ) => Promise<void> | void;
   onCreateBranch: (name: string) => Promise<void>;
+  onSyncActiveThread: () => void | Promise<void>;
   onCopyThread: () => void | Promise<void>;
   onToggleTerminal: () => void;
   showTerminalButton: boolean;

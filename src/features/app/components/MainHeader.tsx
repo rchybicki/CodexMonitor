@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
@@ -31,6 +32,8 @@ type MainHeaderProps = {
   branches: BranchInfo[];
   onCheckoutBranch: (name: string) => Promise<void> | void;
   onCreateBranch: (name: string) => Promise<void> | void;
+  canSyncThread?: boolean;
+  onSyncThread?: () => void | Promise<void>;
   canCopyThread?: boolean;
   onCopyThread?: () => void | Promise<void>;
   onToggleTerminal: () => void;
@@ -84,6 +87,8 @@ export function MainHeader({
   branches,
   onCheckoutBranch,
   onCreateBranch,
+  canSyncThread = false,
+  onSyncThread,
   canCopyThread = false,
   onCopyThread,
   onToggleTerminal,
@@ -108,6 +113,7 @@ export function MainHeader({
   const [infoOpen, setInfoOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [syncInProgress, setSyncInProgress] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const copyTimeoutRef = useRef<number | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -189,6 +195,20 @@ export function MainHeader({
       }, 1200);
     } catch {
       // Errors are handled upstream in the copy handler.
+    }
+  };
+
+  const handleSyncClick = async () => {
+    if (!onSyncThread || syncInProgress) {
+      return;
+    }
+    setSyncInProgress(true);
+    try {
+      await onSyncThread();
+    } catch {
+      // Errors are handled upstream in the refresh handler.
+    } finally {
+      setSyncInProgress(false);
     }
   };
 
@@ -562,6 +582,22 @@ export function MainHeader({
             <Terminal size={14} aria-hidden />
           </button>
         )}
+        <button
+          type="button"
+          className="ghost main-header-action"
+          onClick={handleSyncClick}
+          disabled={!canSyncThread || !onSyncThread || syncInProgress}
+          data-tauri-drag-region="false"
+          aria-label="Sync from server"
+          title="Sync from server"
+          aria-busy={syncInProgress}
+        >
+          <RefreshCw
+            className={`main-header-icon-sync${syncInProgress ? " is-spinning" : ""}`}
+            size={14}
+            aria-hidden
+          />
+        </button>
         <button
           type="button"
           className={`ghost main-header-action${copyFeedback ? " is-copied" : ""}`}

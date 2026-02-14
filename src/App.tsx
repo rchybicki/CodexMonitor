@@ -887,6 +887,12 @@ function MainApp() {
     activeItems,
     onDebug: addDebugEntry,
   });
+  const handleMainHeaderSyncThread = useCallback(async () => {
+    if (!activeWorkspace || !activeThreadId) {
+      return;
+    }
+    await refreshThread(activeWorkspace.id, activeThreadId);
+  }, [activeThreadId, activeWorkspace, refreshThread]);
 
   const {
     renamePrompt,
@@ -1893,6 +1899,7 @@ function MainApp() {
     onCheckoutPullRequest: (pullRequest) =>
       handleCheckoutPullRequest(pullRequest.number),
     onCreateBranch: handleCreateBranch,
+    onSyncActiveThread: handleMainHeaderSyncThread,
     onCopyThread: handleCopyThread,
     onToggleTerminal: handleToggleTerminal,
     showTerminalButton: !isCompact,
