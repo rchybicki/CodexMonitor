@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { WorkspaceInfo } from "../../../types";
 import { pushErrorToast } from "../../../services/toasts";
-import { fileManagerName } from "../../../utils/platformPaths";
+import { fileManagerName, isMobilePlatform } from "../../../utils/platformPaths";
 
 type SidebarMenuHandlers = {
   onDeleteThread: (workspaceId: string, threadId: string) => void;
@@ -18,6 +18,30 @@ type SidebarMenuHandlers = {
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
 };
+
+type MenuAction = {
+  text: string;
+  action: () => void | Promise<void>;
+};
+
+async function showMobileActionPrompt(title: string, actions: MenuAction[]) {
+  const promptLines = actions.map((item, index) => `${index + 1}. ${item.text}`).join("\n");
+  const selection = window.prompt(`${title}\n\n${promptLines}\n\nType action number:`);
+  if (!selection) {
+    return;
+  }
+
+  const selectedIndex = Number.parseInt(selection.trim(), 10) - 1;
+  if (
+    Number.isNaN(selectedIndex) ||
+    selectedIndex < 0 ||
+    selectedIndex >= actions.length
+  ) {
+    return;
+  }
+
+  await actions[selectedIndex].action();
+}
 
 export function useSidebarMenus({
   onDeleteThread,
@@ -97,18 +121,29 @@ export function useSidebarMenus({
     async (event: MouseEvent, workspaceId: string) => {
       event.preventDefault();
       event.stopPropagation();
-      const reloadItem = await MenuItem.new({
-        text: "Reload threads",
-        action: () => onReloadWorkspaceThreads(workspaceId),
-      });
-      const deleteItem = await MenuItem.new({
-        text: "Delete",
-        action: () => onDeleteWorkspace(workspaceId),
-      });
-      const menu = await Menu.new({ items: [reloadItem, deleteItem] });
-      const window = getCurrentWindow();
+      const actions: MenuAction[] = [
+        {
+          text: "Reload threads",
+          action: () => onReloadWorkspaceThreads(workspaceId),
+        },
+        {
+          text: "Delete",
+          action: () => onDeleteWorkspace(workspaceId),
+        },
+      ];
+
+      if (isMobilePlatform()) {
+        await showMobileActionPrompt("Workspace actions", actions);
+        return;
+      }
+
+      const items = await Promise.all(
+        actions.map((item) => MenuItem.new({ text: item.text, action: item.action })),
+      );
+      const menu = await Menu.new({ items });
+      const currentWindow = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
+      await menu.popup(position, currentWindow);
     },
     [onReloadWorkspaceThreads, onDeleteWorkspace],
   );
@@ -118,43 +153,52 @@ export function useSidebarMenus({
       event.preventDefault();
       event.stopPropagation();
       const fileManagerLabel = fileManagerName();
-      const reloadItem = await MenuItem.new({
-        text: "Reload threads",
-        action: () => onReloadWorkspaceThreads(worktree.id),
-      });
-      const revealItem = await MenuItem.new({
-        text: `Show in ${fileManagerLabel}`,
-        action: async () => {
-          if (!worktree.path) {
-            return;
-          }
-          try {
-            const { revealItemInDir } = await import(
-              "@tauri-apps/plugin-opener"
-            );
-            await revealItemInDir(worktree.path);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            pushErrorToast({
-              title: `Couldn't show worktree in ${fileManagerLabel}`,
-              message,
-            });
-            console.warn("Failed to reveal worktree", {
-              message,
-              workspaceId: worktree.id,
-              path: worktree.path,
-            });
-          }
+      const actions: MenuAction[] = [
+        {
+          text: "Reload threads",
+          action: () => onReloadWorkspaceThreads(worktree.id),
         },
-      });
-      const deleteItem = await MenuItem.new({
-        text: "Delete worktree",
-        action: () => onDeleteWorktree(worktree.id),
-      });
-      const menu = await Menu.new({ items: [reloadItem, revealItem, deleteItem] });
-      const window = getCurrentWindow();
+        {
+          text: `Show in ${fileManagerLabel}`,
+          action: async () => {
+            if (!worktree.path) {
+              return;
+            }
+            try {
+              const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+              await revealItemInDir(worktree.path);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              pushErrorToast({
+                title: `Couldn't show worktree in ${fileManagerLabel}`,
+                message,
+              });
+              console.warn("Failed to reveal worktree", {
+                message,
+                workspaceId: worktree.id,
+                path: worktree.path,
+              });
+            }
+          },
+        },
+        {
+          text: "Delete worktree",
+          action: () => onDeleteWorktree(worktree.id),
+        },
+      ];
+
+      if (isMobilePlatform()) {
+        await showMobileActionPrompt("Worktree actions", actions);
+        return;
+      }
+
+      const items = await Promise.all(
+        actions.map((item) => MenuItem.new({ text: item.text, action: item.action })),
+      );
+      const menu = await Menu.new({ items });
+      const currentWindow = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
+      await menu.popup(position, currentWindow);
     },
     [onReloadWorkspaceThreads, onDeleteWorktree],
   );

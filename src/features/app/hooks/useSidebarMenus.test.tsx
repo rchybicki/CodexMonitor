@@ -1,11 +1,11 @@
 /** @vitest-environment jsdom */
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkspaceInfo } from "../../../types";
 import { useSidebarMenus } from "./useSidebarMenus";
-import { fileManagerName } from "../../../utils/platformPaths";
+import { fileManagerName, isMobilePlatform } from "../../../utils/platformPaths";
 
 const menuNew = vi.hoisted(() =>
   vi.fn(async ({ items }) => ({ popup: vi.fn(), items })),
@@ -42,8 +42,62 @@ vi.mock("../../../services/toasts", () => ({
   pushErrorToast: vi.fn(),
 }));
 
+vi.mock("../../../utils/platformPaths", async () => {
+  const actual = await vi.importActual<typeof import("../../../utils/platformPaths")>(
+    "../../../utils/platformPaths",
+  );
+  return {
+    ...actual,
+    fileManagerName: vi.fn(() => "Finder"),
+    isMobilePlatform: vi.fn(() => false),
+  };
+});
+
 describe("useSidebarMenus", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(isMobilePlatform).mockReturnValue(false);
+  });
+
+  it("uses prompt-based workspace actions on mobile", async () => {
+    vi.mocked(isMobilePlatform).mockReturnValue(true);
+    const promptSpy = vi
+      .spyOn(window, "prompt")
+      .mockReturnValue("1");
+
+    const onReloadWorkspaceThreads = vi.fn();
+    const { result } = renderHook(() =>
+      useSidebarMenus({
+        onDeleteThread: vi.fn(),
+        onSyncThread: vi.fn(),
+        onPinThread: vi.fn(),
+        onUnpinThread: vi.fn(),
+        isThreadPinned: vi.fn(() => false),
+        onRenameThread: vi.fn(),
+        onReloadWorkspaceThreads,
+        onDeleteWorkspace: vi.fn(),
+        onDeleteWorktree: vi.fn(),
+      }),
+    );
+
+    const event = {
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+      clientX: 12,
+      clientY: 34,
+    } as unknown as ReactMouseEvent;
+
+    await result.current.showWorkspaceMenu(event, "workspace-1");
+
+    expect(promptSpy).toHaveBeenCalled();
+    expect(onReloadWorkspaceThreads).toHaveBeenCalledWith("workspace-1");
+    expect(menuNew).not.toHaveBeenCalled();
+
+    promptSpy.mockRestore();
+  });
+
   it("adds a show in file manager option for worktrees", async () => {
+    vi.mocked(isMobilePlatform).mockReturnValue(false);
     const onDeleteThread = vi.fn();
     const onSyncThread = vi.fn();
     const onPinThread = vi.fn();
@@ -98,5 +152,54 @@ describe("useSidebarMenus", () => {
     expect(revealItem).toBeDefined();
     await revealItem.action();
     expect(revealItemInDir).toHaveBeenCalledWith("/tmp/worktree-1");
+  });
+
+  it("uses prompt-based worktree actions on mobile", async () => {
+    vi.mocked(isMobilePlatform).mockReturnValue(true);
+    const promptSpy = vi
+      .spyOn(window, "prompt")
+      .mockReturnValue("2");
+
+    const { result } = renderHook(() =>
+      useSidebarMenus({
+        onDeleteThread: vi.fn(),
+        onSyncThread: vi.fn(),
+        onPinThread: vi.fn(),
+        onUnpinThread: vi.fn(),
+        isThreadPinned: vi.fn(() => false),
+        onRenameThread: vi.fn(),
+        onReloadWorkspaceThreads: vi.fn(),
+        onDeleteWorkspace: vi.fn(),
+        onDeleteWorktree: vi.fn(),
+      }),
+    );
+
+    const worktree: WorkspaceInfo = {
+      id: "worktree-2",
+      name: "feature/prompt",
+      path: "/tmp/worktree-2",
+      kind: "worktree",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: "",
+      },
+      worktree: { branch: "feature/prompt" },
+    };
+
+    const event = {
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+      clientX: 12,
+      clientY: 34,
+    } as unknown as ReactMouseEvent;
+
+    await result.current.showWorktreeMenu(event, worktree);
+
+    expect(promptSpy).toHaveBeenCalled();
+    expect(revealItemInDir).toHaveBeenCalledWith("/tmp/worktree-2");
+    expect(menuNew).not.toHaveBeenCalled();
+
+    promptSpy.mockRestore();
   });
 });
