@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react";
+import { useRef, type MouseEvent, type PointerEvent } from "react";
 
 import type { WorkspaceInfo } from "../../../types";
 
@@ -22,6 +22,10 @@ type WorkspaceCardProps = {
   children?: React.ReactNode;
 };
 
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_MOVE_THRESHOLD_PX = 10;
+const LONG_PRESS_SUPPRESS_CLICK_RESET_MS = 1000;
+
 export function WorkspaceCard({
   workspace,
   workspaceName,
@@ -37,6 +41,109 @@ export function WorkspaceCard({
   children,
 }: WorkspaceCardProps) {
   const contentCollapsedClass = isCollapsed ? " collapsed" : "";
+  const longPressRef = useRef<{
+    timerId: number | null;
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    currentTarget: HTMLElement | null;
+  }>({
+    timerId: null,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    currentTarget: null,
+  });
+  const suppressNextClickRef = useRef(false);
+  const suppressResetTimerRef = useRef<number | null>(null);
+
+  const clearSuppressResetTimer = () => {
+    if (suppressResetTimerRef.current === null) {
+      return;
+    }
+    window.clearTimeout(suppressResetTimerRef.current);
+    suppressResetTimerRef.current = null;
+  };
+
+  const cancelLongPress = () => {
+    const state = longPressRef.current;
+    if (state.timerId !== null) {
+      window.clearTimeout(state.timerId);
+      state.timerId = null;
+    }
+    state.pointerId = null;
+    state.currentTarget = null;
+  };
+
+  const scheduleSuppressReset = () => {
+    clearSuppressResetTimer();
+    suppressResetTimerRef.current = window.setTimeout(() => {
+      suppressNextClickRef.current = false;
+      suppressResetTimerRef.current = null;
+    }, LONG_PRESS_SUPPRESS_CLICK_RESET_MS);
+  };
+
+  const startLongPress = (event: PointerEvent) => {
+    if (event.pointerType !== "touch") {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, .connect")) {
+      return;
+    }
+
+    cancelLongPress();
+    const state = longPressRef.current;
+    state.pointerId = event.pointerId;
+    state.startX = event.clientX;
+    state.startY = event.clientY;
+    state.currentTarget = event.currentTarget as HTMLElement;
+    state.timerId = window.setTimeout(() => {
+      const current = longPressRef.current;
+      if (!current.currentTarget) {
+        return;
+      }
+
+      current.timerId = null;
+      current.pointerId = null;
+
+      suppressNextClickRef.current = true;
+      scheduleSuppressReset();
+
+      onShowWorkspaceMenu(
+        {
+          preventDefault: () => {},
+          stopPropagation: () => {},
+          clientX: current.startX,
+          clientY: current.startY,
+          currentTarget: current.currentTarget,
+        } as unknown as MouseEvent,
+        workspace.id,
+      );
+    }, LONG_PRESS_MS);
+  };
+
+  const handleLongPressMove = (event: PointerEvent) => {
+    const state = longPressRef.current;
+    if (state.timerId === null || state.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const dx = event.clientX - state.startX;
+    const dy = event.clientY - state.startY;
+    if (dx * dx + dy * dy > LONG_PRESS_MOVE_THRESHOLD_PX ** 2) {
+      cancelLongPress();
+    }
+  };
+
+  const handleLongPressEnd = (event: PointerEvent) => {
+    const state = longPressRef.current;
+    if (state.pointerId !== event.pointerId) {
+      return;
+    }
+    cancelLongPress();
+  };
 
   return (
     <div className="workspace-card">
@@ -44,8 +151,21 @@ export function WorkspaceCard({
         className={`workspace-row ${isActive ? "active" : ""}`}
         role="button"
         tabIndex={0}
-        onClick={() => onSelectWorkspace(workspace.id)}
+        onClick={(event) => {
+          if (suppressNextClickRef.current) {
+            event.preventDefault();
+            event.stopPropagation();
+            suppressNextClickRef.current = false;
+            clearSuppressResetTimer();
+            return;
+          }
+          onSelectWorkspace(workspace.id);
+        }}
         onContextMenu={(event) => onShowWorkspaceMenu(event, workspace.id)}
+        onPointerDown={startLongPress}
+        onPointerMove={handleLongPressMove}
+        onPointerUp={handleLongPressEnd}
+        onPointerCancel={handleLongPressEnd}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
