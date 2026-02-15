@@ -18,6 +18,7 @@ describe("WorkspaceCard", () => {
   it("handles click and context menu", () => {
     const onSelectWorkspace = vi.fn();
     const onShowWorkspaceMenu = vi.fn();
+    const onOpenWorkspaceMenu = vi.fn();
 
     render(
       <WorkspaceCard
@@ -28,6 +29,7 @@ describe("WorkspaceCard", () => {
         addMenuWidth={200}
         onSelectWorkspace={onSelectWorkspace}
         onShowWorkspaceMenu={onShowWorkspaceMenu}
+        onOpenWorkspaceMenu={onOpenWorkspaceMenu}
         onToggleWorkspaceCollapse={vi.fn()}
         onConnectWorkspace={vi.fn()}
         onToggleAddMenu={vi.fn()}
@@ -41,12 +43,14 @@ describe("WorkspaceCard", () => {
 
     fireEvent.contextMenu(row);
     expect(onShowWorkspaceMenu).toHaveBeenCalledWith(expect.anything(), "ws-1");
+    expect(onOpenWorkspaceMenu).not.toHaveBeenCalled();
   });
 
   it("opens workspace menu on long press and suppresses click", () => {
     vi.useFakeTimers();
     const onSelectWorkspace = vi.fn();
     const onShowWorkspaceMenu = vi.fn();
+    const onOpenWorkspaceMenu = vi.fn();
 
     const { container } = render(
       <WorkspaceCard
@@ -57,6 +61,7 @@ describe("WorkspaceCard", () => {
         addMenuWidth={200}
         onSelectWorkspace={onSelectWorkspace}
         onShowWorkspaceMenu={onShowWorkspaceMenu}
+        onOpenWorkspaceMenu={onOpenWorkspaceMenu}
         onToggleWorkspaceCollapse={vi.fn()}
         onConnectWorkspace={vi.fn()}
         onToggleAddMenu={vi.fn()}
@@ -78,7 +83,8 @@ describe("WorkspaceCard", () => {
 
     vi.advanceTimersByTime(600);
 
-    expect(onShowWorkspaceMenu).toHaveBeenCalledWith(expect.anything(), "ws-1");
+    expect(onOpenWorkspaceMenu).toHaveBeenCalledWith(expect.anything(), "ws-1");
+    expect(onShowWorkspaceMenu).not.toHaveBeenCalled();
 
     fireEvent.click(row);
     expect(onSelectWorkspace).not.toHaveBeenCalled();

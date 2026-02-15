@@ -11,6 +11,7 @@ type WorkspaceCardProps = {
   addMenuWidth: number;
   onSelectWorkspace: (id: string) => void;
   onShowWorkspaceMenu: (event: MouseEvent, workspaceId: string) => void;
+  onOpenWorkspaceMenu: (event: MouseEvent, workspaceId: string) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onToggleAddMenu: (anchor: {
@@ -35,6 +36,7 @@ export function WorkspaceCard({
   addMenuWidth,
   onSelectWorkspace,
   onShowWorkspaceMenu,
+  onOpenWorkspaceMenu,
   onToggleWorkspaceCollapse,
   onConnectWorkspace,
   onToggleAddMenu,
@@ -111,7 +113,7 @@ export function WorkspaceCard({
       suppressNextClickRef.current = true;
       scheduleSuppressReset();
 
-      onShowWorkspaceMenu(
+      onOpenWorkspaceMenu(
         {
           preventDefault: () => {},
           stopPropagation: () => {},

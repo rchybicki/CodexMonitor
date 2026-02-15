@@ -5,10 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkspaceInfo } from "../../../types";
 import { useSidebarMenus } from "./useSidebarMenus";
-import { fileManagerName, isMobilePlatform } from "../../../utils/platformPaths";
+import { fileManagerName } from "../../../utils/platformPaths";
 
+const menuPopup = vi.hoisted(() => vi.fn(async () => {}));
 const menuNew = vi.hoisted(() =>
-  vi.fn(async ({ items }) => ({ popup: vi.fn(), items })),
+  vi.fn(async ({ items }) => ({ popup: menuPopup, items })),
 );
 const menuItemNew = vi.hoisted(() => vi.fn(async (options) => options));
 
@@ -49,23 +50,17 @@ vi.mock("../../../utils/platformPaths", async () => {
   return {
     ...actual,
     fileManagerName: vi.fn(() => "Finder"),
-    isMobilePlatform: vi.fn(() => false),
   };
 });
 
 describe("useSidebarMenus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isMobilePlatform).mockReturnValue(false);
   });
 
-  it("uses prompt-based workspace actions on mobile", async () => {
-    vi.mocked(isMobilePlatform).mockReturnValue(true);
-    const promptSpy = vi
-      .spyOn(window, "prompt")
-      .mockReturnValue("1");
-
+  it("adds reload and delete options for workspace menus", async () => {
     const onReloadWorkspaceThreads = vi.fn();
+    const onDeleteWorkspace = vi.fn();
     const { result } = renderHook(() =>
       useSidebarMenus({
         onDeleteThread: vi.fn(),
@@ -75,7 +70,7 @@ describe("useSidebarMenus", () => {
         isThreadPinned: vi.fn(() => false),
         onRenameThread: vi.fn(),
         onReloadWorkspaceThreads,
-        onDeleteWorkspace: vi.fn(),
+        onDeleteWorkspace,
         onDeleteWorktree: vi.fn(),
       }),
     );
@@ -89,15 +84,26 @@ describe("useSidebarMenus", () => {
 
     await result.current.showWorkspaceMenu(event, "workspace-1");
 
-    expect(promptSpy).toHaveBeenCalled();
-    expect(onReloadWorkspaceThreads).toHaveBeenCalledWith("workspace-1");
-    expect(menuNew).not.toHaveBeenCalled();
+    const menuArgs = menuNew.mock.calls[0]?.[0];
+    const reloadItem = menuArgs.items.find(
+      (item: { text: string }) => item.text === "Reload threads",
+    );
+    const deleteItem = menuArgs.items.find(
+      (item: { text: string }) => item.text === "Delete",
+    );
 
-    promptSpy.mockRestore();
+    expect(reloadItem).toBeDefined();
+    expect(deleteItem).toBeDefined();
+
+    await reloadItem.action();
+    await deleteItem.action();
+
+    expect(onReloadWorkspaceThreads).toHaveBeenCalledWith("workspace-1");
+    expect(onDeleteWorkspace).toHaveBeenCalledWith("workspace-1");
+    expect(menuPopup).toHaveBeenCalled();
   });
 
   it("adds a show in file manager option for worktrees", async () => {
-    vi.mocked(isMobilePlatform).mockReturnValue(false);
     const onDeleteThread = vi.fn();
     const onSyncThread = vi.fn();
     const onPinThread = vi.fn();
@@ -152,54 +158,6 @@ describe("useSidebarMenus", () => {
     expect(revealItem).toBeDefined();
     await revealItem.action();
     expect(revealItemInDir).toHaveBeenCalledWith("/tmp/worktree-1");
-  });
-
-  it("uses prompt-based worktree actions on mobile", async () => {
-    vi.mocked(isMobilePlatform).mockReturnValue(true);
-    const promptSpy = vi
-      .spyOn(window, "prompt")
-      .mockReturnValue("2");
-
-    const { result } = renderHook(() =>
-      useSidebarMenus({
-        onDeleteThread: vi.fn(),
-        onSyncThread: vi.fn(),
-        onPinThread: vi.fn(),
-        onUnpinThread: vi.fn(),
-        isThreadPinned: vi.fn(() => false),
-        onRenameThread: vi.fn(),
-        onReloadWorkspaceThreads: vi.fn(),
-        onDeleteWorkspace: vi.fn(),
-        onDeleteWorktree: vi.fn(),
-      }),
-    );
-
-    const worktree: WorkspaceInfo = {
-      id: "worktree-2",
-      name: "feature/prompt",
-      path: "/tmp/worktree-2",
-      kind: "worktree",
-      connected: true,
-      settings: {
-        sidebarCollapsed: false,
-        worktreeSetupScript: "",
-      },
-      worktree: { branch: "feature/prompt" },
-    };
-
-    const event = {
-      preventDefault: vi.fn(),
-      stopPropagation: vi.fn(),
-      clientX: 12,
-      clientY: 34,
-    } as unknown as ReactMouseEvent;
-
-    await result.current.showWorktreeMenu(event, worktree);
-
-    expect(promptSpy).toHaveBeenCalled();
-    expect(revealItemInDir).toHaveBeenCalledWith("/tmp/worktree-2");
-    expect(menuNew).not.toHaveBeenCalled();
-
-    promptSpy.mockRestore();
+    expect(menuPopup).toHaveBeenCalled();
   });
 });

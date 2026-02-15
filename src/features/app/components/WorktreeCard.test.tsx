@@ -20,6 +20,7 @@ describe("WorktreeCard", () => {
   it("handles click and context menu", () => {
     const onSelectWorkspace = vi.fn();
     const onShowWorktreeMenu = vi.fn();
+    const onOpenWorktreeMenu = vi.fn();
 
     const { container } = render(
       <WorktreeCard
@@ -27,6 +28,7 @@ describe("WorktreeCard", () => {
         isActive={false}
         onSelectWorkspace={onSelectWorkspace}
         onShowWorktreeMenu={onShowWorktreeMenu}
+        onOpenWorktreeMenu={onOpenWorktreeMenu}
         onToggleWorkspaceCollapse={vi.fn()}
         onConnectWorkspace={vi.fn()}
       />,
@@ -43,12 +45,14 @@ describe("WorktreeCard", () => {
 
     fireEvent.contextMenu(row);
     expect(onShowWorktreeMenu).toHaveBeenCalledWith(expect.anything(), worktree);
+    expect(onOpenWorktreeMenu).not.toHaveBeenCalled();
   });
 
   it("opens worktree menu on long press and suppresses click", () => {
     vi.useFakeTimers();
     const onSelectWorkspace = vi.fn();
     const onShowWorktreeMenu = vi.fn();
+    const onOpenWorktreeMenu = vi.fn();
 
     const { container } = render(
       <WorktreeCard
@@ -56,6 +60,7 @@ describe("WorktreeCard", () => {
         isActive={false}
         onSelectWorkspace={onSelectWorkspace}
         onShowWorktreeMenu={onShowWorktreeMenu}
+        onOpenWorktreeMenu={onOpenWorktreeMenu}
         onToggleWorkspaceCollapse={vi.fn()}
         onConnectWorkspace={vi.fn()}
       />,
@@ -76,7 +81,8 @@ describe("WorktreeCard", () => {
 
     vi.advanceTimersByTime(600);
 
-    expect(onShowWorktreeMenu).toHaveBeenCalledWith(expect.anything(), worktree);
+    expect(onOpenWorktreeMenu).toHaveBeenCalledWith(expect.anything(), worktree);
+    expect(onShowWorktreeMenu).not.toHaveBeenCalled();
 
     fireEvent.click(row);
     expect(onSelectWorkspace).not.toHaveBeenCalled();
