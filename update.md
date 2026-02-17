@@ -104,6 +104,8 @@ stat -f "%N %z bytes" \
   "/Users/radoslawchybicki/Library/CloudStorage/GoogleDrive-rchybicki@gmail.com/My Drive/phone share/CodexMonitor/CodexMonitor-release.apk"
 ```
 
+Before installing on phone, delete the previously downloaded APK from the device and download it again from Google Drive to avoid stale cached files.
+
 ## 5) Summarize Changes (Always Required)
 
 When Step 1 found updates, include:
@@ -137,3 +139,31 @@ git push --force-with-lease origin android
 ```
 
 This updates only your fork branch and keeps `upstream` read-only.
+
+## 7) Install Troubleshooting (`App not installed as package appears to be invalid`)
+
+Use this checklist when the APK is already built and published:
+
+1. Verify the Drive APK is healthy (zip + signature + hash):
+
+```bash
+SDK_BT="$(ls -d "$HOME"/Library/Android/sdk/build-tools/* | sort -V | tail -n 1)"
+APK="/Users/radoslawchybicki/Library/CloudStorage/GoogleDrive-rchybicki@gmail.com/My Drive/phone share/CodexMonitor/CodexMonitor-release.apk"
+unzip -t "$APK"
+"$SDK_BT/zipalign" -c -v 4 "$APK"
+"$SDK_BT/apksigner" verify --verbose --print-certs "$APK"
+shasum -a 256 "$APK"
+```
+
+2. Confirm ABI target is correct for Galaxy Fold 7: publish `aarch64` release APK only (`./scripts/build_android.sh --apk-only --target aarch64`).
+3. If the app is already installed and installer still rejects: uninstall existing app first, then install the APK again.
+4. If installing from desktop with `adb`, allow replace/downgrade when needed:
+
+```bash
+adb install -r -d "/path/to/CodexMonitor-release.apk"
+```
+
+Notes:
+
+- In this repo, the release APK is debug-key signed by design (sideload flow), and that is expected.
+- Re-publishing the same `versionCode` can still fail as an in-place update on some installer flows; uninstall + reinstall is the safe fallback.
