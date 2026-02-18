@@ -89,4 +89,29 @@ describe("WorktreeCard", () => {
 
     vi.useRealTimers();
   });
+
+  it("connects from the connect button", () => {
+    const onConnectWorkspace = vi.fn();
+    const disconnectedWorktree = { ...worktree, connected: false };
+
+    const { container } = render(
+      <WorktreeCard
+        worktree={disconnectedWorktree}
+        isActive={false}
+        onSelectWorkspace={vi.fn()}
+        onShowWorktreeMenu={vi.fn()}
+        onOpenWorktreeMenu={vi.fn()}
+        onToggleWorkspaceCollapse={vi.fn()}
+        onConnectWorkspace={onConnectWorkspace}
+      />,
+    );
+
+    const connectButton = container.querySelector("button.connect");
+    expect(connectButton).toBeTruthy();
+    if (!connectButton) {
+      throw new Error("Missing connect button");
+    }
+    fireEvent.click(connectButton);
+    expect(onConnectWorkspace).toHaveBeenCalledWith(disconnectedWorktree);
+  });
 });

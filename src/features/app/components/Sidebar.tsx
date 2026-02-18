@@ -60,7 +60,7 @@ type ThreadMenuAnchor = {
 
 type WorkspaceMenuAnchor = {
   kind: "workspace";
-  workspaceId: string;
+  workspace: WorkspaceInfo;
   top: number;
   left: number;
 };
@@ -230,6 +230,7 @@ export const Sidebar = memo(function Sidebar({
       isThreadPinned,
       onRenameThread,
       onReloadWorkspaceThreads,
+      onConnectWorkspace,
       onDeleteWorkspace,
       onDeleteWorktree,
     });
@@ -565,7 +566,7 @@ export const Sidebar = memo(function Sidebar({
   );
 
   const openWorkspaceMenu = useCallback(
-    (event: MouseEvent, workspaceId: string) => {
+    (event: MouseEvent, workspace: WorkspaceInfo) => {
       event.preventDefault();
       event.stopPropagation();
       setAddMenuAnchor(null);
@@ -578,7 +579,7 @@ export const Sidebar = memo(function Sidebar({
 
       setWorkspaceMenuAnchor({
         kind: "workspace",
-        workspaceId,
+        workspace,
         top,
         left,
       });
@@ -947,7 +948,7 @@ export const Sidebar = memo(function Sidebar({
               onClick={(event) => {
                 event.stopPropagation();
                 closeWorkspaceMenu();
-                onReloadWorkspaceThreads(workspaceMenuAnchor.workspaceId);
+                onReloadWorkspaceThreads(workspaceMenuAnchor.workspace.id);
               }}
               icon={<RefreshCw aria-hidden />}
               role="menuitem"
@@ -955,11 +956,24 @@ export const Sidebar = memo(function Sidebar({
             >
               Reload threads
             </PopoverMenuItem>
+            {!workspaceMenuAnchor.workspace.connected && (
+              <PopoverMenuItem
+                onClick={(event) => {
+                  event.stopPropagation();
+                  closeWorkspaceMenu();
+                  onConnectWorkspace(workspaceMenuAnchor.workspace);
+                }}
+                role="menuitem"
+                data-tauri-drag-region="false"
+              >
+                Connect
+              </PopoverMenuItem>
+            )}
             <PopoverMenuItem
               onClick={(event) => {
                 event.stopPropagation();
                 closeWorkspaceMenu();
-                onDeleteWorkspace(workspaceMenuAnchor.workspaceId);
+                onDeleteWorkspace(workspaceMenuAnchor.workspace.id);
               }}
               icon={<Trash2 aria-hidden />}
               role="menuitem"
@@ -994,6 +1008,19 @@ export const Sidebar = memo(function Sidebar({
             >
               Reload threads
             </PopoverMenuItem>
+            {!worktreeMenuAnchor.worktree.connected && (
+              <PopoverMenuItem
+                onClick={(event) => {
+                  event.stopPropagation();
+                  closeWorktreeMenu();
+                  onConnectWorkspace(worktreeMenuAnchor.worktree);
+                }}
+                role="menuitem"
+                data-tauri-drag-region="false"
+              >
+                Connect
+              </PopoverMenuItem>
+            )}
             <PopoverMenuItem
               onClick={(event) => {
                 event.stopPropagation();

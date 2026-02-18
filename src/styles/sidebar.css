@@ -685,13 +685,18 @@
 
 
 .connect {
+  border: 1px solid var(--border-quiet);
+  background: transparent;
+  appearance: none;
+  font: inherit;
   font-size: 12px;
   color: var(--text-muted);
+  line-height: 1.2;
   align-self: center;
   flex-shrink: 0;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid var(--border-quiet);
+  cursor: pointer;
   -webkit-app-region: no-drag;
 }
 

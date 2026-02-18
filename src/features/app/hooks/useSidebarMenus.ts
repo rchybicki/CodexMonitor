@@ -15,6 +15,7 @@ type SidebarMenuHandlers = {
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onReloadWorkspaceThreads: (workspaceId: string) => void;
+  onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
 };
@@ -27,6 +28,7 @@ export function useSidebarMenus({
   isThreadPinned,
   onRenameThread,
   onReloadWorkspaceThreads,
+  onConnectWorkspace,
   onDeleteWorkspace,
   onDeleteWorktree,
 }: SidebarMenuHandlers) {
@@ -94,23 +96,33 @@ export function useSidebarMenus({
   );
 
   const showWorkspaceMenu = useCallback(
-    async (event: MouseEvent, workspaceId: string) => {
+    async (event: MouseEvent, workspace: WorkspaceInfo) => {
       event.preventDefault();
       event.stopPropagation();
+      const items: MenuItem[] = [];
+      if (!workspace.connected) {
+        items.push(
+          await MenuItem.new({
+            text: "Connect",
+            action: () => onConnectWorkspace(workspace),
+          }),
+        );
+      }
       const reloadItem = await MenuItem.new({
         text: "Reload threads",
-        action: () => onReloadWorkspaceThreads(workspaceId),
+        action: () => onReloadWorkspaceThreads(workspace.id),
       });
       const deleteItem = await MenuItem.new({
         text: "Delete",
-        action: () => onDeleteWorkspace(workspaceId),
+        action: () => onDeleteWorkspace(workspace.id),
       });
-      const menu = await Menu.new({ items: [reloadItem, deleteItem] });
+      items.push(reloadItem, deleteItem);
+      const menu = await Menu.new({ items });
       const window = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);
       await menu.popup(position, window);
     },
-    [onReloadWorkspaceThreads, onDeleteWorkspace],
+    [onConnectWorkspace, onReloadWorkspaceThreads, onDeleteWorkspace],
   );
 
   const showWorktreeMenu = useCallback(
@@ -118,6 +130,15 @@ export function useSidebarMenus({
       event.preventDefault();
       event.stopPropagation();
       const fileManagerLabel = fileManagerName();
+      const items: MenuItem[] = [];
+      if (!worktree.connected) {
+        items.push(
+          await MenuItem.new({
+            text: "Connect",
+            action: () => onConnectWorkspace(worktree),
+          }),
+        );
+      }
       const reloadItem = await MenuItem.new({
         text: "Reload threads",
         action: () => onReloadWorkspaceThreads(worktree.id),
@@ -130,12 +151,13 @@ export function useSidebarMenus({
         text: "Delete worktree",
         action: () => onDeleteWorktree(worktree.id),
       });
-      const menu = await Menu.new({ items: [reloadItem, revealItem, deleteItem] });
+      items.push(reloadItem, revealItem, deleteItem);
+      const menu = await Menu.new({ items });
       const window = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);
       await menu.popup(position, window);
     },
-    [onReloadWorkspaceThreads, onDeleteWorktree],
+    [onConnectWorkspace, onReloadWorkspaceThreads, onDeleteWorktree],
   );
 
   return { showThreadMenu, showWorkspaceMenu, showWorktreeMenu };

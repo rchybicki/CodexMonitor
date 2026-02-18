@@ -60,7 +60,17 @@ describe("useSidebarMenus", () => {
 
   it("adds reload and delete options for workspace menus", async () => {
     const onReloadWorkspaceThreads = vi.fn();
+    const onConnectWorkspace = vi.fn();
     const onDeleteWorkspace = vi.fn();
+    const workspace: WorkspaceInfo = {
+      id: "workspace-1",
+      name: "Workspace One",
+      path: "/tmp/workspace-1",
+      connected: false,
+      settings: {
+        sidebarCollapsed: false,
+      },
+    };
     const { result } = renderHook(() =>
       useSidebarMenus({
         onDeleteThread: vi.fn(),
@@ -70,6 +80,7 @@ describe("useSidebarMenus", () => {
         isThreadPinned: vi.fn(() => false),
         onRenameThread: vi.fn(),
         onReloadWorkspaceThreads,
+        onConnectWorkspace,
         onDeleteWorkspace,
         onDeleteWorktree: vi.fn(),
       }),
@@ -82,9 +93,12 @@ describe("useSidebarMenus", () => {
       clientY: 34,
     } as unknown as ReactMouseEvent;
 
-    await result.current.showWorkspaceMenu(event, "workspace-1");
+    await result.current.showWorkspaceMenu(event, workspace);
 
     const menuArgs = menuNew.mock.calls[0]?.[0];
+    const connectItem = menuArgs.items.find(
+      (item: { text: string }) => item.text === "Connect",
+    );
     const reloadItem = menuArgs.items.find(
       (item: { text: string }) => item.text === "Reload threads",
     );
@@ -92,12 +106,15 @@ describe("useSidebarMenus", () => {
       (item: { text: string }) => item.text === "Delete",
     );
 
+    expect(connectItem).toBeDefined();
     expect(reloadItem).toBeDefined();
     expect(deleteItem).toBeDefined();
 
+    await connectItem.action();
     await reloadItem.action();
     await deleteItem.action();
 
+    expect(onConnectWorkspace).toHaveBeenCalledWith(workspace);
     expect(onReloadWorkspaceThreads).toHaveBeenCalledWith("workspace-1");
     expect(onDeleteWorkspace).toHaveBeenCalledWith("workspace-1");
     expect(menuPopup).toHaveBeenCalled();
@@ -111,6 +128,7 @@ describe("useSidebarMenus", () => {
     const isThreadPinned = vi.fn(() => false);
     const onRenameThread = vi.fn();
     const onReloadWorkspaceThreads = vi.fn();
+    const onConnectWorkspace = vi.fn();
     const onDeleteWorkspace = vi.fn();
     const onDeleteWorktree = vi.fn();
 
@@ -123,6 +141,7 @@ describe("useSidebarMenus", () => {
         isThreadPinned,
         onRenameThread,
         onReloadWorkspaceThreads,
+        onConnectWorkspace,
         onDeleteWorkspace,
         onDeleteWorktree,
       }),

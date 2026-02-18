@@ -10,8 +10,8 @@ type WorkspaceCardProps = {
   addMenuOpen: boolean;
   addMenuWidth: number;
   onSelectWorkspace: (id: string) => void;
-  onShowWorkspaceMenu: (event: MouseEvent, workspaceId: string) => void;
-  onOpenWorkspaceMenu: (event: MouseEvent, workspaceId: string) => void;
+  onShowWorkspaceMenu: (event: MouseEvent, workspace: WorkspaceInfo) => void;
+  onOpenWorkspaceMenu: (event: MouseEvent, workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onToggleAddMenu: (anchor: {
@@ -90,7 +90,7 @@ export function WorkspaceCard({
       return;
     }
 
-    const target = event.target as HTMLElement | null;
+    const target = event.target instanceof Element ? event.target : null;
     if (target?.closest("button, .connect")) {
       return;
     }
@@ -121,7 +121,7 @@ export function WorkspaceCard({
           clientY: current.startY,
           currentTarget: current.currentTarget,
         } as unknown as MouseEvent,
-        workspace.id,
+        workspace,
       );
     }, LONG_PRESS_MS);
   };
@@ -163,7 +163,7 @@ export function WorkspaceCard({
           }
           onSelectWorkspace(workspace.id);
         }}
-        onContextMenu={(event) => onShowWorkspaceMenu(event, workspace.id)}
+        onContextMenu={(event) => onShowWorkspaceMenu(event, workspace)}
         onPointerDown={startLongPress}
         onPointerMove={handleLongPressMove}
         onPointerUp={handleLongPressEnd}
@@ -222,15 +222,17 @@ export function WorkspaceCard({
           </div>
         </div>
         {!workspace.connected && (
-          <span
+          <button
+            type="button"
             className="connect"
             onClick={(event) => {
               event.stopPropagation();
               onConnectWorkspace(workspace);
             }}
+            data-tauri-drag-region="false"
           >
             connect
-          </span>
+          </button>
         )}
       </div>
       <div

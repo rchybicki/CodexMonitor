@@ -80,7 +80,7 @@ export function WorktreeCard({
       return;
     }
 
-    const target = event.target as HTMLElement | null;
+    const target = event.target instanceof Element ? event.target : null;
     if (target?.closest("button, .connect")) {
       return;
     }
@@ -197,15 +197,17 @@ export function WorktreeCard({
                 <span className="worktree-toggle-icon">›</span>
               </button>
               {!worktree.connected && (
-                <span
+                <button
+                  type="button"
                   className="connect"
                   onClick={(event) => {
                     event.stopPropagation();
                     onConnectWorkspace(worktree);
                   }}
+                  data-tauri-drag-region="false"
                 >
                   connect
-                </span>
+                </button>
               )}
             </>
           )}

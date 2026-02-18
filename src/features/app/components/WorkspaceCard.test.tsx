@@ -42,7 +42,7 @@ describe("WorkspaceCard", () => {
     expect(onSelectWorkspace).toHaveBeenCalledWith("ws-1");
 
     fireEvent.contextMenu(row);
-    expect(onShowWorkspaceMenu).toHaveBeenCalledWith(expect.anything(), "ws-1");
+    expect(onShowWorkspaceMenu).toHaveBeenCalledWith(expect.anything(), workspace);
     expect(onOpenWorkspaceMenu).not.toHaveBeenCalled();
   });
 
@@ -83,12 +83,41 @@ describe("WorkspaceCard", () => {
 
     vi.advanceTimersByTime(600);
 
-    expect(onOpenWorkspaceMenu).toHaveBeenCalledWith(expect.anything(), "ws-1");
+    expect(onOpenWorkspaceMenu).toHaveBeenCalledWith(expect.anything(), workspace);
     expect(onShowWorkspaceMenu).not.toHaveBeenCalled();
 
     fireEvent.click(row);
     expect(onSelectWorkspace).not.toHaveBeenCalled();
 
     vi.useRealTimers();
+  });
+
+  it("connects from the connect button", () => {
+    const onConnectWorkspace = vi.fn();
+    const disconnectedWorkspace = { ...workspace, connected: false };
+
+    const { container } = render(
+      <WorkspaceCard
+        workspace={disconnectedWorkspace}
+        isActive={false}
+        isCollapsed={false}
+        addMenuOpen={false}
+        addMenuWidth={200}
+        onSelectWorkspace={vi.fn()}
+        onShowWorkspaceMenu={vi.fn()}
+        onOpenWorkspaceMenu={vi.fn()}
+        onToggleWorkspaceCollapse={vi.fn()}
+        onConnectWorkspace={onConnectWorkspace}
+        onToggleAddMenu={vi.fn()}
+      />,
+    );
+
+    const connectButton = container.querySelector("button.connect");
+    expect(connectButton).toBeTruthy();
+    if (!connectButton) {
+      throw new Error("Missing connect button");
+    }
+    fireEvent.click(connectButton);
+    expect(onConnectWorkspace).toHaveBeenCalledWith(disconnectedWorkspace);
   });
 });
