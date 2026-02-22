@@ -48,7 +48,14 @@ type WorktreeSectionProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onOpenThreadMenu?: (
+    event: MouseEvent,
+    workspaceId: string,
+    threadId: string,
+    canPin: boolean,
+  ) => void;
   onShowWorktreeMenu: (event: MouseEvent, worktree: WorkspaceInfo) => void;
+  onOpenWorktreeMenu?: (event: MouseEvent, worktree: WorkspaceInfo) => void;
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
 };
@@ -76,10 +83,14 @@ export function WorktreeSection({
   onToggleWorkspaceCollapse,
   onSelectThread,
   onShowThreadMenu,
+  onOpenThreadMenu,
   onShowWorktreeMenu,
+  onOpenWorktreeMenu,
   onToggleExpanded,
   onLoadOlderThreads,
 }: WorktreeSectionProps) {
+  const openThreadMenu = onOpenThreadMenu ?? onShowThreadMenu;
+  const openWorktreeMenu = onOpenWorktreeMenu ?? onShowWorktreeMenu;
   if (!worktrees.length) {
     return null;
   }
@@ -123,7 +134,7 @@ export function WorktreeSection({
               isDeleting={deletingWorktreeIds.has(worktree.id)}
               onSelectWorkspace={onSelectWorkspace}
               onShowWorktreeMenu={onShowWorktreeMenu}
-              onOpenWorktreeMenu={onShowWorktreeMenu}
+              onOpenWorktreeMenu={openWorktreeMenu}
               onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
               onConnectWorkspace={onConnectWorkspace}
             >
@@ -149,6 +160,7 @@ export function WorktreeSection({
                   onLoadOlderThreads={onLoadOlderThreads}
                   onSelectThread={onSelectThread}
                   onShowThreadMenu={onShowThreadMenu}
+                  onOpenThreadMenu={openThreadMenu}
                 />
               )}
               {showWorktreeLoader && <ThreadLoading nested />}

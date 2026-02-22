@@ -8,6 +8,13 @@ Release destination (release APK only):
 
 Do not publish debug APKs, universal debug APKs, or AAB artifacts to Google Drive.
 
+## Current Android Release Focus
+
+- Project tab long-press actions must work on Android for project, worktree, and agent rows.
+- Mobile/touch platforms must open the same context menu actions as desktop right-click.
+- Desktop platforms keep native context popup menus.
+- Implementation rule: keep long-press wired to Sidebar anchored popover menus (`openWorkspaceMenu` / `openWorktreeMenu` / `openThreadMenu`) and keep right-click wired to native menu popup (`showWorkspaceMenu` / `showWorktreeMenu` / `showThreadMenu`).
+
 ## Remote Model
 
 - `origin` = your fork (push target)
