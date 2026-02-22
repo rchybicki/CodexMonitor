@@ -66,6 +66,7 @@ If the merge has conflicts, resolve them before continuing.
 ## 3) Build Android Release APK (Only If Step 1 Has Changes)
 
 ```bash
+npm run typecheck
 ./scripts/build_android.sh --apk-only --target aarch64
 ```
 

@@ -27,6 +27,16 @@ const LONG_PRESS_MS = 500;
 const LONG_PRESS_MOVE_THRESHOLD_PX = 10;
 const LONG_PRESS_SUPPRESS_CLICK_RESET_MS = 1000;
 
+function isTouchLikePointer(pointerType: string): boolean {
+  if (pointerType === "touch" || pointerType === "pen") {
+    return true;
+  }
+  if (pointerType === "mouse") {
+    return window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  }
+  return false;
+}
+
 export function WorkspaceCard({
   workspace,
   workspaceName,
@@ -86,7 +96,7 @@ export function WorkspaceCard({
   };
 
   const startLongPress = (event: PointerEvent) => {
-    if (event.pointerType !== "touch") {
+    if (!isTouchLikePointer(event.pointerType)) {
       return;
     }
 
