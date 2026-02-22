@@ -15,10 +15,10 @@ import { useSettingsDisplaySection } from "./useSettingsDisplaySection";
 import { useSettingsEnvironmentsSection } from "./useSettingsEnvironmentsSection";
 import { useSettingsFeaturesSection } from "./useSettingsFeaturesSection";
 import { useSettingsGitSection } from "./useSettingsGitSection";
+import { useSettingsAgentsSection } from "./useSettingsAgentsSection";
 import { useSettingsProjectsSection } from "./useSettingsProjectsSection";
 import { useSettingsServerSection } from "./useSettingsServerSection";
 import type { GroupedWorkspaces } from "./settingsSectionTypes";
-import type { OrbitServiceClient } from "@settings/components/settingsTypes";
 import {
   COMPOSER_PRESET_CONFIGS,
   COMPOSER_PRESET_LABELS,
@@ -66,7 +66,6 @@ type UseSettingsViewOrchestrationArgs = {
   onDownloadDictationModel?: () => void;
   onCancelDictationDownload?: () => void;
   onRemoveDictationModel?: () => void;
-  orbitServiceClient: OrbitServiceClient;
 };
 
 export function useSettingsViewOrchestration({
@@ -98,7 +97,6 @@ export function useSettingsViewOrchestration({
   onDownloadDictationModel,
   onCancelDictationDownload,
   onRemoveDictationModel,
-  orbitServiceClient,
 }: UseSettingsViewOrchestrationArgs) {
   const projects = useMemo(
     () => groupedWorkspaces.flatMap((group) => group.workspaces),
@@ -123,6 +121,9 @@ export function useSettingsViewOrchestration({
     : isWindowsPlatform()
       ? "Windows"
       : "Meta";
+  const followUpShortcutLabel = isMacPlatform()
+    ? "Shift+Cmd+Enter"
+    : "Shift+Ctrl+Enter";
 
   const selectedDictationModel = useMemo(() => {
     return (
@@ -187,16 +188,10 @@ export function useSettingsViewOrchestration({
     onTestSystemNotification,
   });
 
-  const gitSectionProps = useSettingsGitSection({
-    appSettings,
-    onUpdateAppSettings,
-  });
-
   const serverSectionProps = useSettingsServerSection({
     appSettings,
     onUpdateAppSettings,
     onMobileConnectSuccess,
-    orbitServiceClient,
   });
 
   const codexSectionProps = useSettingsCodexSection({
@@ -209,12 +204,20 @@ export function useSettingsViewOrchestration({
     onUpdateWorkspaceSettings,
   });
 
+  const gitSectionProps = useSettingsGitSection({
+    appSettings,
+    onUpdateAppSettings,
+    models: codexSectionProps.defaultModels,
+  });
+
   const featuresSectionProps = useSettingsFeaturesSection({
     appSettings,
     featureWorkspaceId,
     hasCodexHomeOverrides,
     onUpdateAppSettings,
   });
+
+  const agentsSectionProps = useSettingsAgentsSection({ projects });
 
   return {
     projectsSectionProps,
@@ -223,6 +226,7 @@ export function useSettingsViewOrchestration({
     composerSectionProps: {
       appSettings,
       optionKeyLabel,
+      followUpShortcutLabel,
       composerPresetLabels: COMPOSER_PRESET_LABELS,
       onComposerPresetChange: (
         preset: AppSettings["composerEditorPreset"],
@@ -268,6 +272,7 @@ export function useSettingsViewOrchestration({
     },
     gitSectionProps,
     serverSectionProps,
+    agentsSectionProps,
     codexSectionProps,
     featuresSectionProps,
   };

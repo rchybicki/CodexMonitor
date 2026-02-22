@@ -84,6 +84,30 @@ pub(crate) async fn resume_thread_core(
     session.send_request("thread/resume", params).await
 }
 
+pub(crate) async fn thread_live_subscribe_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+) -> Result<(), String> {
+    if thread_id.trim().is_empty() {
+        return Err("threadId is required".to_string());
+    }
+    let _ = get_session_clone(sessions, &workspace_id).await?;
+    Ok(())
+}
+
+pub(crate) async fn thread_live_unsubscribe_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+) -> Result<(), String> {
+    if thread_id.trim().is_empty() {
+        return Err("threadId is required".to_string());
+    }
+    let _ = get_session_clone(sessions, &workspace_id).await?;
+    Ok(())
+}
+
 pub(crate) async fn fork_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: String,
@@ -100,12 +124,14 @@ pub(crate) async fn list_threads_core(
     cursor: Option<String>,
     limit: Option<u32>,
     sort_key: Option<String>,
+    cwd: Option<String>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     let params = json!({
         "cursor": cursor,
         "limit": limit,
         "sortKey": sort_key,
+        "cwd": cwd,
         // Keep spawned sub-agent sessions visible in thread/list so UI refreshes
         // do not drop parent -> child sidebar relationships.
         "sourceKinds": ["cli", "vscode", "subAgentThreadSpawn"]
@@ -342,7 +368,9 @@ pub(crate) async fn experimental_feature_list_core(
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     let params = json!({ "cursor": cursor, "limit": limit });
-    session.send_request("experimentalFeature/list", params).await
+    session
+        .send_request("experimentalFeature/list", params)
+        .await
 }
 
 pub(crate) async fn account_rate_limits_core(

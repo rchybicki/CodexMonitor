@@ -17,6 +17,7 @@ type ThreadEventHandlersOptions = {
   markProcessing: (threadId: string, isProcessing: boolean) => void;
   markReviewing: (threadId: string, isReviewing: boolean) => void;
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
+  getActiveTurnId: (threadId: string) => string | null;
   safeMessageActivity: () => void;
   recordThreadActivity: (
     workspaceId: string,
@@ -50,6 +51,7 @@ export function useThreadEventHandlers({
   markProcessing,
   markReviewing,
   setActiveTurnId,
+  getActiveTurnId,
   safeMessageActivity,
   recordThreadActivity,
   onUserMessageCreated,
@@ -95,8 +97,11 @@ export function useThreadEventHandlers({
   const {
     onThreadStarted,
     onThreadNameUpdated,
+    onThreadArchived,
+    onThreadUnarchived,
     onTurnStarted,
     onTurnCompleted,
+    onThreadStatusChanged,
     onTurnPlanUpdated,
     onTurnDiffUpdated,
     onThreadTokenUsageUpdated,
@@ -110,6 +115,7 @@ export function useThreadEventHandlers({
     markProcessing,
     markReviewing,
     setActiveTurnId,
+    getActiveTurnId,
     pendingInterruptsRef,
     pushThreadErrorMessage,
     safeMessageActivity,
@@ -161,8 +167,11 @@ export function useThreadEventHandlers({
       onFileChangeOutputDelta,
       onThreadStarted,
       onThreadNameUpdated,
+      onThreadArchived,
+      onThreadUnarchived,
       onTurnStarted,
       onTurnCompleted,
+      onThreadStatusChanged,
       onTurnPlanUpdated,
       onTurnDiffUpdated,
       onThreadTokenUsageUpdated,
@@ -188,8 +197,11 @@ export function useThreadEventHandlers({
       onFileChangeOutputDelta,
       onThreadStarted,
       onThreadNameUpdated,
+      onThreadArchived,
+      onThreadUnarchived,
       onTurnStarted,
       onTurnCompleted,
+      onThreadStatusChanged,
       onTurnPlanUpdated,
       onTurnDiffUpdated,
       onThreadTokenUsageUpdated,

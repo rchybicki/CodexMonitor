@@ -6,6 +6,7 @@ import type {
   ApprovalRequest,
   BranchInfo,
   CollaborationModeOption,
+  ComposerSendIntent,
   ConversationItem,
   ComposerEditorSettings,
   CustomPromptOption,
@@ -24,6 +25,7 @@ import type {
   ModelOption,
   OpenAppTarget,
   QueuedMessage,
+  FollowUpMessageBehavior,
   PullRequestReviewAction,
   PullRequestReviewIntent,
   PullRequestSelectionRange,
@@ -37,12 +39,16 @@ import type {
   TurnPlan,
   WorkspaceInfo,
 } from "../../../../types";
-import type { UpdateState } from "../../../update/hooks/useUpdater";
+import type {
+  PostUpdateNoticeState,
+  UpdateState,
+} from "../../../update/hooks/useUpdater";
 import type { TerminalSessionState } from "../../../terminal/hooks/useTerminalSession";
 import type { TerminalTab } from "../../../terminal/hooks/useTerminalTabs";
 import type { ErrorToast } from "../../../../services/toasts";
 import type { GitDiffSource, GitPanelMode } from "../../../git/types";
 import type { PerFileDiffGroup } from "../../../git/utils/perFileThreadDiffs";
+import type { CodexArgsOption } from "@threads/utils/codexArgsProfiles";
 
 export type ThreadActivityStatus = {
   isProcessing: boolean;
@@ -116,6 +122,8 @@ export type LayoutNodesOptions = {
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
   activeItems: ConversationItem[];
+  showPollingFetchStatus?: boolean;
+  pollingIntervalMs?: number;
   activeRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
   accountInfo: AccountSnapshot | null;
@@ -149,6 +157,7 @@ export type LayoutNodesOptions = {
   onOpenDebug: () => void;
   showDebugButton: boolean;
   onAddWorkspace: () => void;
+  onAddWorkspaceFromUrl: () => void;
   onSelectHome: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
@@ -164,6 +173,7 @@ export type LayoutNodesOptions = {
   unpinThread: (workspaceId: string, threadId: string) => void;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
+  getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
@@ -179,6 +189,8 @@ export type LayoutNodesOptions = {
   updaterState: UpdateState;
   onUpdate: () => void;
   onDismissUpdate: () => void;
+  postUpdateNotice: PostUpdateNoticeState;
+  onDismissPostUpdateNotice: () => void;
   errorToasts: ErrorToast[];
   onDismissErrorToast: (id: string) => void;
   latestAgentRuns: Array<{
@@ -318,6 +330,7 @@ export type LayoutNodesOptions = {
   onUnstageGitFile: (path: string) => Promise<void>;
   onRevertGitFile: (path: string) => Promise<void>;
   onRevertAllGitChanges: () => Promise<void>;
+  onReviewUncommittedChanges: () => Promise<void>;
   diffSource: GitDiffSource;
   gitDiffs: GitDiffViewerItem[];
   gitDiffLoading: boolean;
@@ -371,18 +384,15 @@ export type LayoutNodesOptions = {
     text: string,
     images: string[],
     appMentions?: AppMention[],
-  ) => void | Promise<void>;
-  onQueue: (
-    text: string,
-    images: string[],
-    appMentions?: AppMention[],
+    submitIntent?: ComposerSendIntent,
   ) => void | Promise<void>;
   onStop: () => void;
   canStop: boolean;
   onFileAutocompleteActiveChange?: (active: boolean) => void;
   isReviewing: boolean;
   isProcessing: boolean;
-  steerEnabled: boolean;
+  steerAvailable: boolean;
+  followUpMessageBehavior: FollowUpMessageBehavior;
   reviewPrompt: ReviewPromptState;
   onReviewPromptClose: () => void;
   onReviewPromptShowPreset: () => void;
@@ -433,6 +443,9 @@ export type LayoutNodesOptions = {
   selectedEffort: string | null;
   onSelectEffort: (effort: string | null) => void;
   reasoningSupported: boolean;
+  codexArgsOptions: CodexArgsOption[];
+  selectedCodexArgsOverride: string | null;
+  onSelectCodexArgsOverride: (value: string | null) => void;
   accessMode: AccessMode;
   onSelectAccessMode: (mode: AccessMode) => void;
   skills: SkillOption[];

@@ -8,6 +8,7 @@ This file is the agent contract for how to work in this repo.
 Detailed navigation/runbooks live in:
 
 - `docs/codebase-map.md` (task-oriented file map: "if you need X, edit Y")
+- `docs/multi-agent-sync-runbook.md` (upstream `../Codex` sync checklist for multi-agent/config behavior)
 - `README.md` (setup, build, release, and broader project docs)
 
 ## Project Snapshot
@@ -74,6 +75,16 @@ Use project aliases for frontend imports:
 - Threads reducer slices: `src/features/threads/hooks/threadReducer/*`
 
 For broader path maps, use `docs/codebase-map.md`.
+
+## Follow-up Behavior Map
+
+For Queue vs Steer follow-up behavior, start here:
+
+- Settings model + defaults: `src/types.ts`, `src/features/settings/hooks/useAppSettings.ts`
+- Settings persistence/migration: `src-tauri/src/types.rs`, `src-tauri/src/storage.rs`
+- Composer runtime behavior: `src/features/composer/components/Composer.tsx`
+- Send intent routing: `src/features/threads/hooks/useQueuedSend.ts`, `src/features/threads/hooks/useThreadMessaging.ts`
+- App/layout wiring: `src/features/app/hooks/useComposerController.ts`, `src/features/layout/hooks/layoutNodes/buildPrimaryNodes.tsx`, `src/App.tsx`
 
 ## App/Daemon Parity Checklist
 
@@ -148,4 +159,5 @@ Use extra care in high-churn/high-complexity files:
 ## Canonical References
 
 - Task-oriented code map: `docs/codebase-map.md`
+- Multi-agent upstream sync runbook: `docs/multi-agent-sync-runbook.md`
 - Setup/build/release/test commands: `README.md`

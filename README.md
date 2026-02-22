@@ -13,11 +13,12 @@ CodexMonitor is a Tauri app for orchestrating multiple Codex agents across local
 - Worktree and clone agents for isolated work; worktrees live under the app data directory (legacy `.codex-worktrees` supported).
 - Thread management: pin/rename/archive/copy, per-thread drafts, and stop/interrupt in-flight turns.
 - Optional remote backend (daemon) mode for running Codex on another machine.
-- Remote setup helpers for self-hosted connectivity (Orbit actions + Tailscale detection/host bootstrap for TCP mode).
+- Remote setup helpers for self-hosted connectivity (Tailscale detection/host bootstrap for TCP mode).
 
 ### Composer & Agent Controls
 
-- Compose with queueing plus image attachments (picker, drag/drop, paste).
+- Compose with image attachments (picker, drag/drop, paste) and configurable follow-up behavior (`Queue` vs `Steer` while a run is active).
+- Use `Shift+Cmd+Enter` (macOS) or `Shift+Ctrl+Enter` (Windows/Linux) to send the opposite follow-up action for a single message.
 - Autocomplete for skills (`$`), prompts (`/prompts:`), reviews (`/review`), and file paths (`@`).
 - Model picker, collaboration modes (when enabled), reasoning effort, access mode, and context usage ring.
 - Dictation with hold-to-talk shortcuts and live waveform (Whisper).
@@ -351,8 +352,8 @@ src-tauri/
 ## Notes
 
 - Workspaces persist to `workspaces.json` under the app data directory.
-- App settings persist to `settings.json` under the app data directory (theme, backend mode/provider, remote endpoints/tokens, Codex path, default access mode, UI scale).
-- Feature settings are supported in the UI and synced to `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) on load/save. Stable: Collaboration modes (`features.collaboration_modes`), personality (`personality`), Steer mode (`features.steer`), and Background terminal (`features.unified_exec`). Experimental: Collab mode (`features.collab`) and Apps (`features.apps`).
+- App settings persist to `settings.json` under the app data directory (theme, backend mode/provider, remote endpoints/tokens, Codex path, default access mode, UI scale, follow-up message behavior).
+- Feature settings are supported in the UI and synced to `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) on load/save. Stable: Collaboration modes (`features.collaboration_modes`), personality (`personality`), and Background terminal (`features.unified_exec`). Experimental: Apps (`features.apps`). Steering capability still follows Codex `features.steer`, but follow-up default behavior is controlled in Settings → Composer.
 - On launch and on window focus, the app reconnects and refreshes thread lists for each workspace.
 - Threads are restored by filtering `thread/list` results using the workspace `cwd`.
 - Selecting a thread always calls `thread/resume` to refresh messages from disk.
@@ -376,4 +377,4 @@ Frontend calls live in `src/services/tauri.ts` and map to commands in `src-tauri
 - Git/GitHub: `get_git_status`, `list_git_roots`, `get_git_diffs`, `get_git_log`, `get_git_commit_diff`, `get_git_remote`, `stage_git_file`, `stage_git_all`, `unstage_git_file`, `revert_git_file`, `revert_git_all`, `commit_git`, `push_git`, `pull_git`, `fetch_git`, `sync_git`, `list_git_branches`, `checkout_git_branch`, `create_git_branch`, `get_github_issues`, `get_github_pull_requests`, `get_github_pull_request_diff`, `get_github_pull_request_comments`.
 - Prompts: `prompts_list`, `prompts_create`, `prompts_update`, `prompts_delete`, `prompts_move`, `prompts_workspace_dir`, `prompts_global_dir`.
 - Terminal/dictation/notifications/usage: `terminal_open`, `terminal_write`, `terminal_resize`, `terminal_close`, `dictation_model_status`, `dictation_download_model`, `dictation_cancel_download`, `dictation_remove_model`, `dictation_request_permission`, `dictation_start`, `dictation_stop`, `dictation_cancel`, `send_notification_fallback`, `is_macos_debug_build`, `local_usage_snapshot`.
-- Remote backend helpers: `orbit_connect_test`, `orbit_sign_in_start`, `orbit_sign_in_poll`, `orbit_sign_out`, `orbit_runner_start`, `orbit_runner_stop`, `orbit_runner_status`, `tailscale_status`, `tailscale_daemon_command_preview`, `tailscale_daemon_start`, `tailscale_daemon_stop`, `tailscale_daemon_status`.
+- Remote backend helpers: `tailscale_status`, `tailscale_daemon_command_preview`, `tailscale_daemon_start`, `tailscale_daemon_stop`, `tailscale_daemon_status`.

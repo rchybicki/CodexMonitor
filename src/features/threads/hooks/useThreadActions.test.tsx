@@ -73,6 +73,7 @@ describe("useThreadActions", () => {
       itemsByThread: {},
       threadsByWorkspace: {},
       activeThreadIdByWorkspace: {},
+      activeTurnIdByThread: {},
       threadListCursorByWorkspace: {},
       threadStatusById: {},
       threadSortKey: "updated_at",
@@ -89,6 +90,7 @@ describe("useThreadActions", () => {
     const utils = renderHook(() => useThreadActions(args));
 
     return {
+      args,
       dispatch,
       loadedThreadsRef: args.loadedThreadsRef,
       replaceOnResumeRef: args.replaceOnResumeRef,
@@ -436,6 +438,117 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("keeps local processing state when resume turn status is ambiguous", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-1",
+          preview: "Still running",
+          updated_at: 1000,
+          turns: [{ id: "turn-remote", status: "unknown_state", items: [] }],
+        },
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
+
+    const { result, dispatch } = renderActions({
+      threadStatusById: {
+        "thread-1": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 10,
+          lastDurationMs: null,
+        },
+      },
+      activeTurnIdByThread: {
+        "thread-1": "turn-local",
+      },
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-1", true, true);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: true,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setActiveTurnId",
+      threadId: "thread-1",
+      turnId: "turn-local",
+    });
+  });
+
+  it("uses latest local processing state while resume is in flight", async () => {
+    let resolveResume: ((value: Record<string, unknown>) => void) | null = null;
+    vi.mocked(resumeThread).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveResume = resolve;
+        }),
+    );
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
+
+    const { args, result, rerender, dispatch } = renderActions({
+      threadStatusById: {},
+      activeTurnIdByThread: {},
+    });
+
+    let resumePromise: Promise<string | null> | null = null;
+    await act(async () => {
+      resumePromise = result.current.resumeThreadForWorkspace(
+        "ws-1",
+        "thread-1",
+        true,
+        true,
+      );
+    });
+
+    args.threadStatusById = {
+      "thread-1": {
+        isProcessing: true,
+        hasUnread: false,
+        isReviewing: false,
+        processingStartedAt: 10,
+        lastDurationMs: null,
+      },
+    };
+    args.activeTurnIdByThread = {
+      "thread-1": "turn-local",
+    };
+    rerender();
+
+    await act(async () => {
+      resolveResume?.({
+        result: {
+          thread: {
+            id: "thread-1",
+            turns: [{ id: "turn-remote", status: "unknown_state", items: [] }],
+          },
+        },
+      });
+      await resumePromise;
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: true,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setActiveTurnId",
+      threadId: "thread-1",
+      turnId: "turn-local",
+    });
+  });
+
   it("hydrates processing state from in-progress turns on resume", async () => {
     vi.mocked(resumeThread).mockResolvedValue({
       result: {
@@ -469,6 +582,41 @@ describe("useThreadActions", () => {
       type: "setActiveTurnId",
       threadId: "thread-3",
       turnId: "turn-2",
+    });
+  });
+
+  it("hydrates processing timestamp from resumed active turn start time", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-3",
+          preview: "Working thread",
+          updated_at: 1000,
+          turns: [
+            {
+              id: "turn-2",
+              status: "inProgress",
+              started_at: 1_700_000_000_000,
+              items: [],
+            },
+          ],
+        },
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-3", true);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "markProcessing",
+      threadId: "thread-3",
+      isProcessing: true,
+      timestamp: 1_700_000_000_000,
     });
   });
 
@@ -563,7 +711,13 @@ describe("useThreadActions", () => {
       await result.current.listThreadsForWorkspace(workspace);
     });
 
-    expect(listThreads).toHaveBeenCalled();
+    expect(listThreads).toHaveBeenCalledWith(
+      "ws-1",
+      null,
+      100,
+      "updated_at",
+      "/tmp/codex",
+    );
     expect(dispatch).toHaveBeenCalledWith({
       type: "setThreadListLoading",
       workspaceId: "ws-1",
@@ -638,7 +792,7 @@ describe("useThreadActions", () => {
     expect(onSubagentThreadDetected).toHaveBeenCalledWith("ws-1", "child-thread");
   });
 
-  it("matches thread cwd on Windows paths even when path casing differs", async () => {
+  it("passes windows cwd to server-side thread list filtering", async () => {
     const windowsWorkspace: WorkspaceInfo = {
       ...workspace,
       path: "C:\\Dev\\CodexMon",
@@ -664,6 +818,13 @@ describe("useThreadActions", () => {
       await result.current.listThreadsForWorkspace(windowsWorkspace);
     });
 
+    expect(listThreads).toHaveBeenCalledWith(
+      "ws-1",
+      null,
+      100,
+      "updated_at",
+      "C:\\Dev\\CodexMon",
+    );
     expect(dispatch).toHaveBeenCalledWith({
       type: "setThreads",
       workspaceId: "ws-1",
@@ -715,7 +876,13 @@ describe("useThreadActions", () => {
       await result.current.listThreadsForWorkspace(workspace);
     });
 
-    expect(listThreads).toHaveBeenCalledWith("ws-1", null, 100, "created_at");
+    expect(listThreads).toHaveBeenCalledWith(
+      "ws-1",
+      null,
+      100,
+      "created_at",
+      "/tmp/codex",
+    );
   });
 
   it("loads older threads when a cursor is available", async () => {
@@ -769,7 +936,7 @@ describe("useThreadActions", () => {
     });
   });
 
-  it("loads older threads for Windows paths even when path casing differs", async () => {
+  it("passes windows cwd when loading older threads", async () => {
     const windowsWorkspace: WorkspaceInfo = {
       ...workspace,
       path: "C:\\Dev\\CodexMon",
@@ -803,6 +970,13 @@ describe("useThreadActions", () => {
       await result.current.loadOlderThreadsForWorkspace(windowsWorkspace);
     });
 
+    expect(listThreads).toHaveBeenCalledWith(
+      "ws-1",
+      "cursor-1",
+      100,
+      "updated_at",
+      "C:\\Dev\\CodexMon",
+    );
     expect(dispatch).toHaveBeenCalledWith({
       type: "setThreads",
       workspaceId: "ws-1",

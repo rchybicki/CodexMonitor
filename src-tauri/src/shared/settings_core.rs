@@ -16,9 +16,6 @@ fn normalize_personality(value: &str) -> Option<&'static str> {
 
 pub(crate) async fn get_app_settings_core(app_settings: &Mutex<AppSettings>) -> AppSettings {
     let mut settings = app_settings.lock().await.clone();
-    if let Ok(Some(collab_enabled)) = codex_config::read_collab_enabled() {
-        settings.experimental_collab_enabled = collab_enabled;
-    }
     if let Ok(Some(collaboration_modes_enabled)) = codex_config::read_collaboration_modes_enabled()
     {
         settings.collaboration_modes_enabled = collaboration_modes_enabled;
@@ -47,7 +44,6 @@ pub(crate) async fn update_app_settings_core(
     app_settings: &Mutex<AppSettings>,
     settings_path: &PathBuf,
 ) -> Result<AppSettings, String> {
-    let _ = codex_config::write_collab_enabled(settings.experimental_collab_enabled);
     let _ = codex_config::write_collaboration_modes_enabled(settings.collaboration_modes_enabled);
     let _ = codex_config::write_steer_enabled(settings.steer_enabled);
     let _ = codex_config::write_unified_exec_enabled(settings.unified_exec_enabled);
@@ -57,23 +53,6 @@ pub(crate) async fn update_app_settings_core(
     let mut current = app_settings.lock().await;
     *current = settings.clone();
     Ok(settings)
-}
-
-pub(crate) async fn update_remote_backend_token_core(
-    app_settings: &Mutex<AppSettings>,
-    settings_path: &PathBuf,
-    token: Option<&str>,
-) -> Result<AppSettings, String> {
-    let normalized_token = token
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-    let mut next_settings = app_settings.lock().await.clone();
-    if next_settings.remote_backend_token == normalized_token {
-        return Ok(next_settings);
-    }
-    next_settings.remote_backend_token = normalized_token;
-    update_app_settings_core(next_settings, app_settings, settings_path).await
 }
 
 pub(crate) fn get_codex_config_path_core() -> Result<String, String> {

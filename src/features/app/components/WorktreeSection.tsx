@@ -2,14 +2,10 @@ import Layers from "lucide-react/dist/esm/icons/layers";
 import type { MouseEvent } from "react";
 
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
+import type { ThreadStatusById } from "../../../utils/threadStatus";
 import { ThreadList } from "./ThreadList";
 import { ThreadLoading } from "./ThreadLoading";
 import { WorktreeCard } from "./WorktreeCard";
-
-type ThreadStatusMap = Record<
-  string,
-  { isProcessing: boolean; hasUnread: boolean; isReviewing: boolean }
->;
 
 type ThreadRowsResult = {
   pinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
@@ -22,7 +18,7 @@ type WorktreeSectionProps = {
   worktrees: WorkspaceInfo[];
   deletingWorktreeIds: Set<string>;
   threadsByWorkspace: Record<string, ThreadSummary[]>;
-  threadStatusById: ThreadStatusMap;
+  threadStatusById: ThreadStatusById;
   threadListLoadingByWorkspace: Record<string, boolean>;
   threadListPagingByWorkspace: Record<string, boolean>;
   threadListCursorByWorkspace: Record<string, string | null>;
@@ -38,6 +34,7 @@ type WorktreeSectionProps = {
     pinVersion?: number,
   ) => ThreadRowsResult;
   getThreadTime: (thread: ThreadSummary) => string | null;
+  getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
   pinnedThreadsVersion: number;
@@ -51,14 +48,7 @@ type WorktreeSectionProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
-  onOpenThreadMenu: (
-    event: MouseEvent,
-    workspaceId: string,
-    threadId: string,
-    canPin: boolean,
-  ) => void;
   onShowWorktreeMenu: (event: MouseEvent, worktree: WorkspaceInfo) => void;
-  onOpenWorktreeMenu: (event: MouseEvent, worktree: WorkspaceInfo) => void;
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
 };
@@ -77,6 +67,7 @@ export function WorktreeSection({
   pendingUserInputKeys,
   getThreadRows,
   getThreadTime,
+  getThreadArgsBadge,
   isThreadPinned,
   getPinTimestamp,
   pinnedThreadsVersion,
@@ -85,9 +76,7 @@ export function WorktreeSection({
   onToggleWorkspaceCollapse,
   onSelectThread,
   onShowThreadMenu,
-  onOpenThreadMenu,
   onShowWorktreeMenu,
-  onOpenWorktreeMenu,
   onToggleExpanded,
   onLoadOlderThreads,
 }: WorktreeSectionProps) {
@@ -134,7 +123,7 @@ export function WorktreeSection({
               isDeleting={deletingWorktreeIds.has(worktree.id)}
               onSelectWorkspace={onSelectWorkspace}
               onShowWorktreeMenu={onShowWorktreeMenu}
-              onOpenWorktreeMenu={onOpenWorktreeMenu}
+              onOpenWorktreeMenu={onShowWorktreeMenu}
               onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
               onConnectWorkspace={onConnectWorkspace}
             >
@@ -154,12 +143,12 @@ export function WorktreeSection({
                   threadStatusById={threadStatusById}
                   pendingUserInputKeys={pendingUserInputKeys}
                   getThreadTime={getThreadTime}
+                  getThreadArgsBadge={getThreadArgsBadge}
                   isThreadPinned={isThreadPinned}
                   onToggleExpanded={onToggleExpanded}
                   onLoadOlderThreads={onLoadOlderThreads}
                   onSelectThread={onSelectThread}
                   onShowThreadMenu={onShowThreadMenu}
-                  onOpenThreadMenu={onOpenThreadMenu}
                 />
               )}
               {showWorktreeLoader && <ThreadLoading nested />}

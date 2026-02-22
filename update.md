@@ -11,7 +11,7 @@ Do not publish debug APKs, universal debug APKs, or AAB artifacts to Google Driv
 ## Remote Model
 
 - `origin` = your fork (push target)
-- `upstream` = main project repo (read-only source for rebases)
+- `upstream` = main project repo (read-only source for merges)
 - Never push to `upstream`.
 
 ## 1) Review Upstream and Decide
@@ -19,14 +19,16 @@ Do not publish debug APKs, universal debug APKs, or AAB artifacts to Google Driv
 Fetch and list upstream commits not yet in your branch:
 
 ```bash
+git checkout android
 git fetch upstream --prune
-git log --oneline --decorate --no-merges HEAD..upstream/main
+git log --oneline --decorate --no-merges android..upstream/main
 ```
 
 Also list upstream-only affected files (from merge-base to upstream):
 
 ```bash
-git diff --name-only "$(git merge-base HEAD upstream/main)"..upstream/main
+MB="$(git merge-base android upstream/main)"
+git diff --name-only "$MB"..upstream/main
 ```
 
 Record these two outputs in your run summary every time.
@@ -34,7 +36,8 @@ Record these two outputs in your run summary every time.
 No-op rule:
 
 - If `HEAD..upstream/main` is empty, stop.
-- Do not rebase.
+- If `android..upstream/main` is empty, stop.
+- Do not merge.
 - Do not build APK.
 - Do not publish to Google Drive.
 - Do not push to `origin/android`.
@@ -42,25 +45,23 @@ No-op rule:
 Optional shell gate:
 
 ```bash
-UPSTREAM_CHANGES="$(git log --oneline --no-merges HEAD..upstream/main)"
+UPSTREAM_CHANGES="$(git log --oneline --no-merges android..upstream/main)"
 if [ -z "$UPSTREAM_CHANGES" ]; then
-  echo "No upstream changes. Rebase/build/publish skipped."
+  echo "No upstream changes. Merge/build/publish skipped."
   exit 0
 fi
 ```
 
-## 2) Rebase Your Branch (Only If Step 1 Has Changes)
+## 2) Merge Upstream Into Your Branch (Only If Step 1 Has Changes)
 
-Use your Android branch (`android`):
+Use your Android branch (`android`) and merge (no rebase):
 
 ```bash
 git checkout android
-git stash push -u -m "pre-rebase-local-state"
-git rebase upstream/main
-git stash pop
+git merge --no-ff upstream/main
 ```
 
-If `git stash pop` has conflicts, resolve them before continuing.
+If the merge has conflicts, resolve them before continuing.
 
 ## 3) Build Android Release APK (Only If Step 1 Has Changes)
 
@@ -80,11 +81,16 @@ Validate destination directory first:
 test -d "/Users/radoslawchybicki/Library/CloudStorage/GoogleDrive-rchybicki@gmail.com/My Drive/phone share/CodexMonitor"
 ```
 
-Then copy only the release APK:
+Then copy only the release APK (retry once if it fails):
 
 ```bash
-cp -f "src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk" \
-  "/Users/radoslawchybicki/Library/CloudStorage/GoogleDrive-rchybicki@gmail.com/My Drive/phone share/CodexMonitor/CodexMonitor-release.apk"
+SRC="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk"
+DST="/Users/radoslawchybicki/Library/CloudStorage/GoogleDrive-rchybicki@gmail.com/My Drive/phone share/CodexMonitor/CodexMonitor-release.apk"
+
+cp -f "$SRC" "$DST" || {
+  sleep 3
+  cp -f "$SRC" "$DST"
+}
 ```
 
 Verify:
@@ -108,34 +114,35 @@ Before installing on phone, delete the previously downloaded APK from the device
 
 ## 5) Summarize Changes (Always Required)
 
-When Step 1 found updates, include:
+When Step 1 found updates, include (using the Step 1 outputs captured before merge):
 
-1. Full upstream commit list from `git log HEAD..upstream/main`
-2. Upstream changed files from `git diff --name-only "$(git merge-base HEAD upstream/main)"..upstream/main`
-3. Rebase result and current branch SHA
+1. Full upstream commit list from `git log android..upstream/main`
+2. Upstream changed files from `git diff --name-only "$(git merge-base android upstream/main)"..upstream/main`
+3. Merge result and current branch SHA
 4. Release APK path, size, timestamp, and hash match
 5. Push status to `origin`
+6. Publish retry result (whether first copy succeeded or second attempt was needed)
 
 Also include:
 
 - Count of upstream commits applied in this run
 - Commit SHAs and subjects applied in this run
-- File-change count from `git diff --name-only "$(git merge-base HEAD upstream/main)"..upstream/main | wc -l`
+- File-change count from `git diff --name-only "$(git merge-base android upstream/main)"..upstream/main | wc -l`
 
 When Step 1 found no updates, include:
 
 1. `No upstream changes`
-2. `Rebase skipped`
+2. `Merge skipped`
 3. `Build skipped`
 4. `Publish skipped`
 5. `Push skipped`
 
 ## 6) Push Updated Branch to Fork (Only If Step 1 Has Changes)
 
-After rebase:
+After merge:
 
 ```bash
-git push --force-with-lease origin android
+git push origin android
 ```
 
 This updates only your fork branch and keeps `upstream` read-only.

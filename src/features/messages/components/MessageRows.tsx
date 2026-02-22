@@ -13,6 +13,8 @@ import Terminal from "lucide-react/dist/esm/icons/terminal";
 import Users from "lucide-react/dist/esm/icons/users";
 import Wrench from "lucide-react/dist/esm/icons/wrench";
 import X from "lucide-react/dist/esm/icons/x";
+import { exportMarkdownFile } from "@services/tauri";
+import { pushErrorToast } from "@services/toasts";
 import type { ConversationItem } from "../../../types";
 import { languageFromPath } from "../../../utils/syntax";
 import { DiffBlock } from "../../git/components/DiffBlock";
@@ -46,6 +48,8 @@ type WorkingIndicatorProps = {
   lastDurationMs?: number | null;
   hasItems: boolean;
   reasoningLabel?: string | null;
+  showPollingFetchStatus?: boolean;
+  pollingIntervalMs?: number;
 };
 
 type MessageRowProps = MarkdownFileLinkProps & {
@@ -258,7 +262,7 @@ function toolIconForSummary(
   if (label === "read") {
     return FileText;
   }
-  if (label === "searched") {
+  if (label === "searched" || label === "searching") {
     return Search;
   }
 
@@ -271,14 +275,32 @@ function toolIconForSummary(
   return Wrench;
 }
 
+function buildPlanExportFileName(itemId: string) {
+  const normalized = itemId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  if (!normalized) {
+    return "plan.md";
+  }
+  return normalized.startsWith("plan-") ? `${normalized}.md` : `plan-${normalized}.md`;
+}
+
 export const WorkingIndicator = memo(function WorkingIndicator({
   isThinking,
   processingStartedAt = null,
   lastDurationMs = null,
   hasItems,
   reasoningLabel = null,
+  showPollingFetchStatus = false,
+  pollingIntervalMs = 12000,
 }: WorkingIndicatorProps) {
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [pollCountdownSeconds, setPollCountdownSeconds] = useState(() =>
+    Math.max(1, Math.ceil(pollingIntervalMs / 1000)),
+  );
 
   useEffect(() => {
     if (!isThinking || !processingStartedAt) {
@@ -291,6 +313,22 @@ export const WorkingIndicator = memo(function WorkingIndicator({
     }, 1000);
     return () => window.clearInterval(interval);
   }, [isThinking, processingStartedAt]);
+
+  useEffect(() => {
+    if (!showPollingFetchStatus || isThinking) {
+      return undefined;
+    }
+    const intervalSeconds = Math.max(1, Math.ceil(pollingIntervalMs / 1000));
+    setPollCountdownSeconds(intervalSeconds);
+    const timer = window.setInterval(() => {
+      setPollCountdownSeconds((previous) =>
+        previous <= 1 ? intervalSeconds : previous - 1,
+      );
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [isThinking, pollingIntervalMs, showPollingFetchStatus]);
 
   return (
     <>
@@ -307,7 +345,9 @@ export const WorkingIndicator = memo(function WorkingIndicator({
         <div className="turn-complete" aria-live="polite">
           <span className="turn-complete-line" aria-hidden />
           <span className="turn-complete-label">
-            Done in {formatDurationMs(lastDurationMs)}
+            {showPollingFetchStatus
+              ? `New message will be fetched in ${pollCountdownSeconds} seconds`
+              : `Done in ${formatDurationMs(lastDurationMs)}`}
           </span>
           <span className="turn-complete-line" aria-hidden />
         </div>
@@ -506,6 +546,7 @@ export const ToolRow = memo(function ToolRow({
 }: ToolRowProps) {
   const isFileChange = item.toolType === "fileChange";
   const isCommand = item.toolType === "commandExecution";
+  const isPlan = item.toolType === "plan";
   const commandText = isCommand
     ? item.title.replace(/^Command:\s*/i, "").trim()
     : "";
@@ -537,6 +578,7 @@ export const ToolRow = memo(function ToolRow({
     typeof item.durationMs === "number" ? item.durationMs : null;
   const isLongRunning = commandDurationMs !== null && commandDurationMs >= 1200;
   const [showLiveOutput, setShowLiveOutput] = useState(false);
+  const [isExportingPlan, setIsExportingPlan] = useState(false);
 
   useEffect(() => {
     if (!isCommandRunning) {
@@ -561,6 +603,30 @@ export const ToolRow = memo(function ToolRow({
       onRequestAutoScroll?.();
     }
   }, [isCommandRunning, onRequestAutoScroll, showCommandOutput, showLiveOutput]);
+
+  const handlePlanExport = useCallback(
+    async (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const output = (summary.output ?? "").trim();
+      if (!output) {
+        return;
+      }
+      setIsExportingPlan(true);
+      try {
+        await exportMarkdownFile(output, buildPlanExportFileName(item.id));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to export plan.";
+        pushErrorToast({
+          title: "Plan export failed",
+          message,
+        });
+      } finally {
+        setIsExportingPlan(false);
+      }
+    },
+    [item.id, summary.output],
+  );
 
   return (
     <div className={`tool-inline ${isExpanded ? "tool-inline-expanded" : ""}`}>
@@ -655,13 +721,25 @@ export const ToolRow = memo(function ToolRow({
           <Markdown
             value={summary.output}
             className="tool-inline-output markdown"
-            codeBlock
+            codeBlock={item.toolType !== "plan"}
             showFilePath={showMessageFilePath}
             workspacePath={workspacePath}
             onOpenFileLink={onOpenFileLink}
             onOpenFileLinkMenu={onOpenFileLinkMenu}
             onOpenThreadLink={onOpenThreadLink}
           />
+        )}
+        {showToolOutput && isPlan && (summary.output ?? "").trim() && (
+          <div className="tool-inline-actions">
+            <button
+              type="button"
+              className="ghost tool-inline-action"
+              onClick={handlePlanExport}
+              disabled={isExportingPlan}
+            >
+              {isExportingPlan ? "Exporting..." : "Export .md"}
+            </button>
+          </div>
         )}
       </div>
     </div>

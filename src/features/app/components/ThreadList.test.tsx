@@ -39,21 +39,18 @@ const baseProps = {
   onLoadOlderThreads: vi.fn(),
   onSelectThread: vi.fn(),
   onShowThreadMenu: vi.fn(),
-  onOpenThreadMenu: vi.fn(),
 };
 
 describe("ThreadList", () => {
   it("renders active row and handles click/context menu", () => {
     const onSelectThread = vi.fn();
     const onShowThreadMenu = vi.fn();
-    const onOpenThreadMenu = vi.fn();
 
     render(
       <ThreadList
         {...baseProps}
         onSelectThread={onSelectThread}
         onShowThreadMenu={onShowThreadMenu}
-        onOpenThreadMenu={onOpenThreadMenu}
       />,
     );
 
@@ -75,57 +72,6 @@ describe("ThreadList", () => {
       "thread-1",
       true,
     );
-
-    const menuButton = screen.getByRole("button", { name: "Thread actions" });
-    fireEvent.click(menuButton);
-    expect(onOpenThreadMenu).toHaveBeenCalledWith(
-      expect.anything(),
-      "ws-1",
-      "thread-1",
-      true,
-    );
-  });
-
-  it("opens the menu on long press", () => {
-    vi.useFakeTimers();
-    const onSelectThread = vi.fn();
-    const onOpenThreadMenu = vi.fn();
-
-    const { container } = render(
-      <ThreadList
-        {...baseProps}
-        onSelectThread={onSelectThread}
-        onOpenThreadMenu={onOpenThreadMenu}
-      />,
-    );
-
-    const row = container.querySelector(".thread-row");
-    expect(row).toBeTruthy();
-    if (!row) {
-      throw new Error("Missing thread row");
-    }
-
-    fireEvent.pointerDown(row, {
-      pointerType: "touch",
-      pointerId: 1,
-      clientX: 10,
-      clientY: 10,
-    });
-
-    vi.advanceTimersByTime(600);
-
-    expect(onOpenThreadMenu).toHaveBeenCalledWith(
-      expect.anything(),
-      "ws-1",
-      "thread-1",
-      true,
-    );
-
-    // A long press should not trigger the default click action afterwards.
-    fireEvent.click(row);
-    expect(onSelectThread).not.toHaveBeenCalled();
-
-    vi.useRealTimers();
   });
 
   it("shows the more button and toggles expanded", () => {

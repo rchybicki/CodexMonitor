@@ -1,30 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import * as notification from "@tauri-apps/plugin-notification";
 import {
+  exportMarkdownFile,
   addWorkspace,
   compactThread,
   createGitHubRepo,
   fetchGit,
   forkThread,
   getAppsList,
+  getAgentsSettings,
   getExperimentalFeatureList,
   getGitHubIssues,
   getGitLog,
   getGitStatus,
   getOpenAppIcon,
+  listThreads,
   listMcpServerStatus,
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
   listWorkspaces,
-  orbitConnectTest,
-  orbitRunnerStart,
-  orbitRunnerStatus,
-  orbitRunnerStop,
-  orbitSignInPoll,
-  orbitSignInStart,
-  orbitSignOut,
   openWorkspaceIn,
   readAgentMd,
   stageGitAll,
@@ -34,6 +30,7 @@ import {
   steerTurn,
   sendNotification,
   setCodexFeatureFlag,
+  setAgentsCoreSettings,
   startReview,
   setThreadName,
   tailscaleDaemonStart,
@@ -44,6 +41,12 @@ import {
   pickWorkspacePaths,
   writeGlobalAgentsMd,
   writeGlobalCodexConfigToml,
+  createAgent,
+  updateAgent,
+  deleteAgent,
+  readAgentConfigToml,
+  generateAgentDescription,
+  writeAgentConfigToml,
   writeAgentMd,
 } from "./tauri";
 
@@ -53,6 +56,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
+  save: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-notification", () => ({
@@ -104,6 +108,36 @@ describe("tauri invoke wrappers", () => {
     openMock.mockResolvedValueOnce(["/tmp/one", "/tmp/two"]);
 
     await expect(pickWorkspacePaths()).resolves.toEqual(["/tmp/one", "/tmp/two"]);
+  });
+
+  it("returns null when markdown export is cancelled", async () => {
+    const saveMock = vi.mocked(save);
+    const invokeMock = vi.mocked(invoke);
+    saveMock.mockResolvedValueOnce(null);
+
+    await expect(exportMarkdownFile("# Plan")).resolves.toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "write_text_file",
+      expect.anything(),
+    );
+  });
+
+  it("writes markdown to the selected path", async () => {
+    const saveMock = vi.mocked(save);
+    const invokeMock = vi.mocked(invoke);
+    saveMock.mockResolvedValueOnce("/tmp/plan.md");
+
+    await expect(exportMarkdownFile("# Plan", "my-plan.md")).resolves.toBe("/tmp/plan.md");
+
+    expect(saveMock).toHaveBeenCalledWith({
+      title: "Export plan as Markdown",
+      defaultPath: "my-plan.md",
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    expect(invokeMock).toHaveBeenCalledWith("write_text_file", {
+      path: "/tmp/plan.md",
+      content: "# Plan",
+    });
   });
 
   it("maps workspace_id to workspaceId for git status", async () => {
@@ -229,6 +263,21 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("maps workspaceId/cursor/limit/sortKey/cwd for list_threads", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await listThreads("ws-10", "cursor-1", 25, "updated_at", "/tmp/codex");
+
+    expect(invokeMock).toHaveBeenCalledWith("list_threads", {
+      workspaceId: "ws-10",
+      cursor: "cursor-1",
+      limit: 25,
+      sortKey: "updated_at",
+      cwd: "/tmp/codex",
+    });
+  });
+
   it("maps workspaceId/cursor/limit/threadId for apps_list", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({});
@@ -260,10 +309,10 @@ describe("tauri invoke wrappers", () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce(undefined);
 
-    await setCodexFeatureFlag("collab", true);
+    await setCodexFeatureFlag("apps", true);
 
     expect(invokeMock).toHaveBeenCalledWith("set_codex_feature_flag", {
-      featureKey: "collab",
+      featureKey: "apps",
       enabled: true,
     });
   });
@@ -316,29 +365,6 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("get_open_app_icon", {
       appName: "Xcode",
     });
-  });
-
-  it("invokes orbit remote auth/runner wrappers", async () => {
-    const invokeMock = vi.mocked(invoke);
-    invokeMock.mockResolvedValue(undefined);
-
-    await orbitConnectTest();
-    await orbitSignInStart();
-    await orbitSignInPoll("device-code");
-    await orbitSignOut();
-    await orbitRunnerStart();
-    await orbitRunnerStop();
-    await orbitRunnerStatus();
-
-    expect(invokeMock).toHaveBeenCalledWith("orbit_connect_test");
-    expect(invokeMock).toHaveBeenCalledWith("orbit_sign_in_start");
-    expect(invokeMock).toHaveBeenCalledWith("orbit_sign_in_poll", {
-      deviceCode: "device-code",
-    });
-    expect(invokeMock).toHaveBeenCalledWith("orbit_sign_out");
-    expect(invokeMock).toHaveBeenCalledWith("orbit_runner_start");
-    expect(invokeMock).toHaveBeenCalledWith("orbit_runner_stop");
-    expect(invokeMock).toHaveBeenCalledWith("orbit_runner_status");
   });
 
   it("invokes tailscale wrappers", async () => {
@@ -436,6 +462,140 @@ describe("tauri invoke wrappers", () => {
       kind: "config",
       workspaceId: undefined,
       content: "model = \"gpt-5\"",
+    });
+  });
+
+  it("reads agents settings", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      configPath: "/Users/me/.codex/config.toml",
+      multiAgentEnabled: true,
+      maxThreads: 6,
+      agents: [],
+    });
+
+    await getAgentsSettings();
+
+    expect(invokeMock).toHaveBeenCalledWith("get_agents_settings");
+  });
+
+  it("updates core agents settings", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      configPath: "/Users/me/.codex/config.toml",
+      multiAgentEnabled: false,
+      maxThreads: 4,
+      agents: [],
+    });
+
+    await setAgentsCoreSettings({ multiAgentEnabled: false, maxThreads: 4 });
+
+    expect(invokeMock).toHaveBeenCalledWith("set_agents_core_settings", {
+      input: { multiAgentEnabled: false, maxThreads: 4 },
+    });
+  });
+
+  it("creates an agent", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await createAgent({
+      name: "researcher",
+      description: "Research-focused role",
+      developerInstructions: "Investigate root cause first.",
+      template: "blank",
+      model: "gpt-5-codex",
+      reasoningEffort: "medium",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("create_agent", {
+      input: {
+        name: "researcher",
+        description: "Research-focused role",
+        developerInstructions: "Investigate root cause first.",
+        template: "blank",
+        model: "gpt-5-codex",
+        reasoningEffort: "medium",
+      },
+    });
+  });
+
+  it("updates an agent", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await updateAgent({
+      originalName: "researcher",
+      name: "code_reviewer",
+      description: "Review-focused role",
+      developerInstructions: "Focus on correctness and regression risk.",
+      renameManagedFile: true,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("update_agent", {
+      input: {
+        originalName: "researcher",
+        name: "code_reviewer",
+        description: "Review-focused role",
+        developerInstructions: "Focus on correctness and regression risk.",
+        renameManagedFile: true,
+      },
+    });
+  });
+
+  it("deletes an agent", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await deleteAgent({
+      name: "researcher",
+      deleteManagedFile: true,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("delete_agent", {
+      input: {
+        name: "researcher",
+        deleteManagedFile: true,
+      },
+    });
+  });
+
+  it("reads an agent config file", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce("model = \"gpt-5-codex\"");
+
+    await readAgentConfigToml("researcher");
+
+    expect(invokeMock).toHaveBeenCalledWith("read_agent_config_toml", {
+      agentName: "researcher",
+    });
+  });
+
+  it("writes an agent config file", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await writeAgentConfigToml("researcher", "model = \"gpt-5-codex\"");
+
+    expect(invokeMock).toHaveBeenCalledWith("write_agent_config_toml", {
+      agentName: "researcher",
+      content: "model = \"gpt-5-codex\"",
+    });
+  });
+
+  it("generates an improved agent description", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      description: "Stabilizes flaky test suites",
+      developerInstructions:
+        "Reproduce failures first.\nPrefer deterministic fixes.\nAdd targeted coverage.",
+    });
+
+    await generateAgentDescription("ws-agent", "tests");
+
+    expect(invokeMock).toHaveBeenCalledWith("generate_agent_description", {
+      workspaceId: "ws-agent",
+      description: "tests",
     });
   });
 

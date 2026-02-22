@@ -7,16 +7,12 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import { createPortal } from "react-dom";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent, RefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import type { RefObject } from "react";
 import { FolderOpen } from "lucide-react";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
-import Pencil from "lucide-react/dist/esm/icons/pencil";
-import Pin from "lucide-react/dist/esm/icons/pin";
 import Plus from "lucide-react/dist/esm/icons/plus";
-import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
-import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import X from "lucide-react/dist/esm/icons/x";
 import {
   PopoverMenuItem,
@@ -32,45 +28,18 @@ import { PinnedThreadList } from "./PinnedThreadList";
 import { WorkspaceCard } from "./WorkspaceCard";
 import { WorkspaceGroup } from "./WorkspaceGroup";
 import { useCollapsedGroups } from "../hooks/useCollapsedGroups";
+import { useMenuController } from "../hooks/useMenuController";
 import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
-import { useDismissibleMenu } from "../hooks/useDismissibleMenu";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
-import { fileManagerName } from "../../../utils/platformPaths";
 import { getUsageLabels } from "../utils/usageLabels";
-import { revealWorktreeInFileManager } from "../utils/revealWorktreeInFileManager";
 import { formatRelativeTimeShort } from "../../../utils/time";
+import type { ThreadStatusById } from "../../../utils/threadStatus";
 
 const COLLAPSED_GROUPS_STORAGE_KEY = "codexmonitor.collapsedGroups";
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
 const ADD_MENU_WIDTH = 200;
-const THREAD_MENU_WIDTH = 220;
-const WORKSPACE_MENU_WIDTH = 220;
-const WORKTREE_MENU_WIDTH = 240;
-
-type ThreadMenuAnchor = {
-  kind: "thread";
-  workspaceId: string;
-  threadId: string;
-  canPin: boolean;
-  top: number;
-  left: number;
-};
-
-type WorkspaceMenuAnchor = {
-  kind: "workspace";
-  workspace: WorkspaceInfo;
-  top: number;
-  left: number;
-};
-
-type WorktreeMenuAnchor = {
-  kind: "worktree";
-  worktree: WorkspaceInfo;
-  top: number;
-  left: number;
-};
 
 type WorkspaceGroupSection = {
   id: string | null;
@@ -87,10 +56,7 @@ type SidebarProps = {
   startingDraftThreadWorkspaceId?: string | null;
   threadsByWorkspace: Record<string, ThreadSummary[]>;
   threadParentById: Record<string, string>;
-  threadStatusById: Record<
-    string,
-    { isProcessing: boolean; hasUnread: boolean; isReviewing: boolean }
-  >;
+  threadStatusById: ThreadStatusById;
   threadListLoadingByWorkspace: Record<string, boolean>;
   threadListPagingByWorkspace: Record<string, boolean>;
   threadListCursorByWorkspace: Record<string, string | null>;
@@ -125,6 +91,7 @@ type SidebarProps = {
   unpinThread: (workspaceId: string, threadId: string) => void;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
+  getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
@@ -183,6 +150,7 @@ export const Sidebar = memo(function Sidebar({
   unpinThread,
   isThreadPinned,
   getPinTimestamp,
+  getThreadArgsBadge,
   onRenameThread,
   onDeleteWorkspace,
   onDeleteWorktree,
@@ -207,16 +175,11 @@ export const Sidebar = memo(function Sidebar({
     left: number;
     width: number;
   } | null>(null);
-  const addMenuRef = useRef<HTMLDivElement | null>(null);
-  const [threadMenuAnchor, setThreadMenuAnchor] =
-    useState<ThreadMenuAnchor | null>(null);
-  const threadMenuRef = useRef<HTMLDivElement | null>(null);
-  const [workspaceMenuAnchor, setWorkspaceMenuAnchor] =
-    useState<WorkspaceMenuAnchor | null>(null);
-  const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
-  const [worktreeMenuAnchor, setWorktreeMenuAnchor] =
-    useState<WorktreeMenuAnchor | null>(null);
-  const worktreeMenuRef = useRef<HTMLDivElement | null>(null);
+  const addMenuController = useMenuController({
+    open: Boolean(addMenuAnchor),
+    onDismiss: () => setAddMenuAnchor(null),
+  });
+  const { containerRef: addMenuRef } = addMenuController;
   const { collapsedGroups, toggleGroupCollapse } = useCollapsedGroups(
     COLLAPSED_GROUPS_STORAGE_KEY,
   );
@@ -244,7 +207,6 @@ export const Sidebar = memo(function Sidebar({
   } = getUsageLabels(accountRateLimits, usageShowRemaining);
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
-  const fileManagerLabel = fileManagerName();
   const pendingUserInputKeys = useMemo(
     () =>
       new Set(
@@ -443,30 +405,6 @@ export const Sidebar = memo(function Sidebar({
     [],
   );
 
-  useDismissibleMenu({
-    isOpen: Boolean(addMenuAnchor),
-    containerRef: addMenuRef,
-    onClose: () => setAddMenuAnchor(null),
-  });
-
-  useDismissibleMenu({
-    isOpen: Boolean(threadMenuAnchor),
-    containerRef: threadMenuRef,
-    onClose: () => setThreadMenuAnchor(null),
-  });
-
-  useDismissibleMenu({
-    isOpen: Boolean(workspaceMenuAnchor),
-    containerRef: workspaceMenuRef,
-    onClose: () => setWorkspaceMenuAnchor(null),
-  });
-
-  useDismissibleMenu({
-    isOpen: Boolean(worktreeMenuAnchor),
-    containerRef: worktreeMenuRef,
-    onClose: () => setWorktreeMenuAnchor(null),
-  });
-
   useEffect(() => {
     if (!addMenuAnchor) {
       return;
@@ -481,145 +419,10 @@ export const Sidebar = memo(function Sidebar({
   }, [addMenuAnchor]);
 
   useEffect(() => {
-    if (!threadMenuAnchor) {
-      return;
-    }
-    function handleScroll() {
-      setThreadMenuAnchor(null);
-    }
-    window.addEventListener("scroll", handleScroll, true);
-    return () => {
-      window.removeEventListener("scroll", handleScroll, true);
-    };
-  }, [threadMenuAnchor]);
-
-  useEffect(() => {
-    if (!workspaceMenuAnchor) {
-      return;
-    }
-    function handleScroll() {
-      setWorkspaceMenuAnchor(null);
-    }
-    window.addEventListener("scroll", handleScroll, true);
-    return () => {
-      window.removeEventListener("scroll", handleScroll, true);
-    };
-  }, [workspaceMenuAnchor]);
-
-  useEffect(() => {
-    if (!worktreeMenuAnchor) {
-      return;
-    }
-    function handleScroll() {
-      setWorktreeMenuAnchor(null);
-    }
-    window.addEventListener("scroll", handleScroll, true);
-    return () => {
-      window.removeEventListener("scroll", handleScroll, true);
-    };
-  }, [worktreeMenuAnchor]);
-
-  useEffect(() => {
     if (!isSearchOpen && searchQuery) {
       setSearchQuery("");
     }
   }, [isSearchOpen, searchQuery]);
-
-  const getMenuPosition = useCallback((target: HTMLElement, menuWidth: number) => {
-    const rect = target.getBoundingClientRect();
-    const left = Math.min(
-      Math.max(rect.right - menuWidth, 12),
-      window.innerWidth - menuWidth - 12,
-    );
-    const top = rect.bottom + 8;
-
-    return { top, left };
-  }, []);
-
-  const openThreadMenu = useCallback(
-    (
-      event: MouseEvent,
-      workspaceId: string,
-      threadId: string,
-      canPin: boolean,
-    ) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setAddMenuAnchor(null);
-      setWorkspaceMenuAnchor(null);
-      setWorktreeMenuAnchor(null);
-      const { top, left } = getMenuPosition(
-        event.currentTarget as HTMLElement,
-        THREAD_MENU_WIDTH,
-      );
-
-      setThreadMenuAnchor({
-        kind: "thread",
-        workspaceId,
-        threadId,
-        canPin,
-        top,
-        left,
-      });
-    },
-    [getMenuPosition],
-  );
-
-  const openWorkspaceMenu = useCallback(
-    (event: MouseEvent, workspace: WorkspaceInfo) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setAddMenuAnchor(null);
-      setThreadMenuAnchor(null);
-      setWorktreeMenuAnchor(null);
-      const { top, left } = getMenuPosition(
-        event.currentTarget as HTMLElement,
-        WORKSPACE_MENU_WIDTH,
-      );
-
-      setWorkspaceMenuAnchor({
-        kind: "workspace",
-        workspace,
-        top,
-        left,
-      });
-    },
-    [getMenuPosition],
-  );
-
-  const openWorktreeMenu = useCallback(
-    (event: MouseEvent, worktree: WorkspaceInfo) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setAddMenuAnchor(null);
-      setThreadMenuAnchor(null);
-      setWorkspaceMenuAnchor(null);
-      const { top, left } = getMenuPosition(
-        event.currentTarget as HTMLElement,
-        WORKTREE_MENU_WIDTH,
-      );
-
-      setWorktreeMenuAnchor({
-        kind: "worktree",
-        worktree,
-        top,
-        left,
-      });
-    },
-    [getMenuPosition],
-  );
-
-  const closeThreadMenu = useCallback(() => setThreadMenuAnchor(null), []);
-  const closeWorkspaceMenu = useCallback(() => setWorkspaceMenuAnchor(null), []);
-  const closeWorktreeMenu = useCallback(() => setWorktreeMenuAnchor(null), []);
-
-  const handleCopyThreadId = useCallback(async (threadId: string) => {
-    try {
-      await navigator.clipboard.writeText(threadId);
-    } catch {
-      // Clipboard failures are non-fatal here.
-    }
-  }, []);
 
   return (
     <aside
@@ -702,10 +505,10 @@ export const Sidebar = memo(function Sidebar({
                 threadStatusById={threadStatusById}
                 pendingUserInputKeys={pendingUserInputKeys}
                 getThreadTime={getThreadTime}
+                getThreadArgsBadge={getThreadArgsBadge}
                 isThreadPinned={isThreadPinned}
                 onSelectThread={onSelectThread}
                 onShowThreadMenu={showThreadMenu}
-                onOpenThreadMenu={openThreadMenu}
               />
             </div>
           )}
@@ -772,7 +575,7 @@ export const Sidebar = memo(function Sidebar({
                       addMenuWidth={ADD_MENU_WIDTH}
                       onSelectWorkspace={onSelectWorkspace}
                       onShowWorkspaceMenu={showWorkspaceMenu}
-                      onOpenWorkspaceMenu={openWorkspaceMenu}
+                      onOpenWorkspaceMenu={showWorkspaceMenu}
                       onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
                       onConnectWorkspace={onConnectWorkspace}
                       onToggleAddMenu={setAddMenuAnchor}
@@ -858,6 +661,7 @@ export const Sidebar = memo(function Sidebar({
                           pendingUserInputKeys={pendingUserInputKeys}
                           getThreadRows={getThreadRows}
                           getThreadTime={getThreadTime}
+                          getThreadArgsBadge={getThreadArgsBadge}
                           isThreadPinned={isThreadPinned}
                           getPinTimestamp={getPinTimestamp}
                           pinnedThreadsVersion={pinnedThreadsVersion}
@@ -866,9 +670,7 @@ export const Sidebar = memo(function Sidebar({
                           onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
                           onSelectThread={onSelectThread}
                           onShowThreadMenu={showThreadMenu}
-                          onOpenThreadMenu={openThreadMenu}
                           onShowWorktreeMenu={showWorktreeMenu}
-                          onOpenWorktreeMenu={openWorktreeMenu}
                           onToggleExpanded={handleToggleExpanded}
                           onLoadOlderThreads={onLoadOlderThreads}
                         />
@@ -887,12 +689,12 @@ export const Sidebar = memo(function Sidebar({
                           threadStatusById={threadStatusById}
                           pendingUserInputKeys={pendingUserInputKeys}
                           getThreadTime={getThreadTime}
+                          getThreadArgsBadge={getThreadArgsBadge}
                           isThreadPinned={isThreadPinned}
                           onToggleExpanded={handleToggleExpanded}
                           onLoadOlderThreads={onLoadOlderThreads}
                           onSelectThread={onSelectThread}
                           onShowThreadMenu={showThreadMenu}
-                          onOpenThreadMenu={openThreadMenu}
                         />
                       )}
                       {showThreadLoader && <ThreadLoading />}
@@ -932,211 +734,6 @@ export const Sidebar = memo(function Sidebar({
         onSwitchAccount={onSwitchAccount}
         onCancelSwitchAccount={onCancelSwitchAccount}
       />
-      {workspaceMenuAnchor?.kind === "workspace" &&
-        createPortal(
-          <PopoverSurface
-            className="sidebar-thread-menu"
-            ref={workspaceMenuRef}
-            style={{
-              top: workspaceMenuAnchor.top,
-              left: workspaceMenuAnchor.left,
-              width: WORKSPACE_MENU_WIDTH,
-            }}
-            role="menu"
-          >
-            <PopoverMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                closeWorkspaceMenu();
-                onReloadWorkspaceThreads(workspaceMenuAnchor.workspace.id);
-              }}
-              icon={<RefreshCw aria-hidden />}
-              role="menuitem"
-              data-tauri-drag-region="false"
-            >
-              Reload threads
-            </PopoverMenuItem>
-            {!workspaceMenuAnchor.workspace.connected && (
-              <PopoverMenuItem
-                onClick={(event) => {
-                  event.stopPropagation();
-                  closeWorkspaceMenu();
-                  onConnectWorkspace(workspaceMenuAnchor.workspace);
-                }}
-                role="menuitem"
-                data-tauri-drag-region="false"
-              >
-                Connect
-              </PopoverMenuItem>
-            )}
-            <PopoverMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                closeWorkspaceMenu();
-                onDeleteWorkspace(workspaceMenuAnchor.workspace.id);
-              }}
-              icon={<Trash2 aria-hidden />}
-              role="menuitem"
-              data-tauri-drag-region="false"
-            >
-              Delete
-            </PopoverMenuItem>
-          </PopoverSurface>,
-          document.body,
-        )}
-      {worktreeMenuAnchor?.kind === "worktree" &&
-        createPortal(
-          <PopoverSurface
-            className="sidebar-thread-menu"
-            ref={worktreeMenuRef}
-            style={{
-              top: worktreeMenuAnchor.top,
-              left: worktreeMenuAnchor.left,
-              width: WORKTREE_MENU_WIDTH,
-            }}
-            role="menu"
-          >
-            <PopoverMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                closeWorktreeMenu();
-                onReloadWorkspaceThreads(worktreeMenuAnchor.worktree.id);
-              }}
-              icon={<RefreshCw aria-hidden />}
-              role="menuitem"
-              data-tauri-drag-region="false"
-            >
-              Reload threads
-            </PopoverMenuItem>
-            {!worktreeMenuAnchor.worktree.connected && (
-              <PopoverMenuItem
-                onClick={(event) => {
-                  event.stopPropagation();
-                  closeWorktreeMenu();
-                  onConnectWorkspace(worktreeMenuAnchor.worktree);
-                }}
-                role="menuitem"
-                data-tauri-drag-region="false"
-              >
-                Connect
-              </PopoverMenuItem>
-            )}
-            <PopoverMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                closeWorktreeMenu();
-                void revealWorktreeInFileManager(worktreeMenuAnchor.worktree);
-              }}
-              icon={<FolderOpen aria-hidden />}
-              role="menuitem"
-              data-tauri-drag-region="false"
-            >
-              {`Show in ${fileManagerLabel}`}
-            </PopoverMenuItem>
-            <PopoverMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                closeWorktreeMenu();
-                onDeleteWorktree(worktreeMenuAnchor.worktree.id);
-              }}
-              icon={<Trash2 aria-hidden />}
-              role="menuitem"
-              data-tauri-drag-region="false"
-            >
-              Delete worktree
-            </PopoverMenuItem>
-          </PopoverSurface>,
-          document.body,
-        )}
-      {threadMenuAnchor?.kind === "thread" &&
-        createPortal(
-          <PopoverSurface
-            className="sidebar-thread-menu"
-            ref={threadMenuRef}
-            style={{
-              top: threadMenuAnchor.top,
-              left: threadMenuAnchor.left,
-              width: THREAD_MENU_WIDTH,
-            }}
-            role="menu"
-          >
-            <PopoverMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                closeThreadMenu();
-                onRenameThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
-              }}
-              icon={<Pencil aria-hidden />}
-              role="menuitem"
-              data-tauri-drag-region="false"
-            >
-              Rename
-            </PopoverMenuItem>
-            <PopoverMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                closeThreadMenu();
-                onSyncThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
-              }}
-              icon={<RefreshCw aria-hidden />}
-              role="menuitem"
-              data-tauri-drag-region="false"
-            >
-              Sync from server
-            </PopoverMenuItem>
-            {threadMenuAnchor.canPin ? (
-              (() => {
-                const isPinned = isThreadPinned(
-                  threadMenuAnchor.workspaceId,
-                  threadMenuAnchor.threadId,
-                );
-                return (
-                  <PopoverMenuItem
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      closeThreadMenu();
-                      if (isPinned) {
-                        unpinThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
-                      } else {
-                        pinThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
-                      }
-                    }}
-                    icon={<Pin aria-hidden />}
-                    role="menuitem"
-                    data-tauri-drag-region="false"
-                  >
-                    {isPinned ? "Unpin" : "Pin"}
-                  </PopoverMenuItem>
-                );
-              })()
-            ) : null}
-            <PopoverMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                closeThreadMenu();
-                void handleCopyThreadId(threadMenuAnchor.threadId);
-              }}
-              icon={<Copy aria-hidden />}
-              role="menuitem"
-              data-tauri-drag-region="false"
-            >
-              Copy ID
-            </PopoverMenuItem>
-            <PopoverMenuItem
-              onClick={(event) => {
-                event.stopPropagation();
-                closeThreadMenu();
-                onDeleteThread(threadMenuAnchor.workspaceId, threadMenuAnchor.threadId);
-              }}
-              icon={<Trash2 aria-hidden />}
-              role="menuitem"
-              data-tauri-drag-region="false"
-            >
-              Archive
-            </PopoverMenuItem>
-          </PopoverSurface>,
-          document.body,
-        )}
     </aside>
   );
 });

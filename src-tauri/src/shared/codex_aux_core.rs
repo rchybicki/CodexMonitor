@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::ErrorKind;
@@ -12,11 +13,19 @@ use crate::backend::app_server::{
 use crate::shared::process_core::tokio_command;
 use crate::types::AppSettings;
 
-const DEFAULT_COMMIT_MESSAGE_PROMPT: &str = "Generate a concise git commit message for the following changes. \
+const DEFAULT_COMMIT_MESSAGE_PROMPT: &str =
+    "Generate a concise git commit message for the following changes. \
 Follow conventional commit format (e.g., feat:, fix:, refactor:, docs:, etc.). \
 Keep the summary line under 72 characters. \
 Only output the commit message, nothing else.\n\n\
 Changes:\n{diff}";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GeneratedAgentConfiguration {
+    pub description: String,
+    pub developer_instructions: String,
+}
 
 pub(crate) fn build_commit_message_prompt(diff: &str, template: &str) -> String {
     let base = if template.trim().is_empty() {
@@ -58,6 +67,135 @@ Examples:\n\
 {{\"title\":\"Add Coverage Tests\",\"worktreeName\":\"test/add-coverage-tests\"}}\n\n\
 Task:\n{cleaned_prompt}"
     )
+}
+
+pub(crate) fn build_agent_description_prompt(description: &str) -> String {
+    format!(
+        "You generate custom coding-agent configuration text.\n\
+Return ONLY a JSON object with exactly these keys:\n\
+- description: short role summary, one sentence, 4-12 words.\n\
+- developerInstructions: multiline instructions for the agent.\n\n\
+Requirements:\n\
+- Preserve the user's intent, even when the input is short.\n\
+- Keep description concise and practical.\n\
+- developerInstructions should be actionable and specific.\n\
+- developerInstructions must be 3-8 lines.\n\
+- Do not include markdown fences.\n\n\
+Example:\n\
+{{\"description\":\"Investigates flaky tests and stabilizes suites\",\"developerInstructions\":\"Investigate flaky test failures and identify root causes.\\nReproduce failures deterministically before proposing changes.\\nPrefer minimal, safe fixes and add targeted regression coverage.\"}}\n\n\
+User prompt:\n\
+{description}"
+    )
+}
+
+pub(crate) fn parse_agent_description_value(
+    raw: &str,
+) -> Result<GeneratedAgentConfiguration, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("No agent configuration was generated".to_string());
+    }
+
+    let cleaned = trimmed
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with("```"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if cleaned.trim().is_empty() {
+        return Err("No agent configuration was generated".to_string());
+    }
+
+    if let Some(json_value) = extract_json_value(cleaned.as_str()) {
+        let description = json_value
+            .get("description")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let developer_instructions = json_value
+            .get("developerInstructions")
+            .or_else(|| json_value.get("developer_instructions"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        if description.is_some() || developer_instructions.is_some() {
+            return Ok(GeneratedAgentConfiguration {
+                description: description.unwrap_or_default(),
+                developer_instructions: developer_instructions.unwrap_or_default(),
+            });
+        }
+    }
+
+    let cleaned_lines = cleaned
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+
+    let mut description: Option<String> = None;
+    let mut developer_instructions: Option<String> = None;
+    for (index, line) in cleaned_lines.iter().enumerate() {
+        if let Some((key, value)) = line.split_once(':') {
+            let key = key.trim().to_ascii_lowercase();
+            let value = value.trim();
+            match key.as_str() {
+                "description" if description.is_none() && !value.is_empty() => {
+                    description = Some(value.to_string())
+                }
+                "developer instructions" | "developer_instructions" | "instructions"
+                    if developer_instructions.is_none() =>
+                {
+                    let trailing = cleaned_lines
+                        .iter()
+                        .skip(index + 1)
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let trailing = trailing.trim();
+                    let combined = if value.is_empty() {
+                        trailing.to_string()
+                    } else if trailing.is_empty() {
+                        value.to_string()
+                    } else {
+                        format!("{value}\n{trailing}")
+                    };
+                    if !combined.trim().is_empty() {
+                        developer_instructions = Some(combined);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if description.is_some() || developer_instructions.is_some() {
+        return Ok(GeneratedAgentConfiguration {
+            description: description.unwrap_or_default(),
+            developer_instructions: developer_instructions.unwrap_or_default(),
+        });
+    }
+
+    if let Some((first, rest)) = cleaned.split_once('\n') {
+        let description = first.trim();
+        let developer_instructions = rest.trim();
+        if !description.is_empty() || !developer_instructions.is_empty() {
+            return Ok(GeneratedAgentConfiguration {
+                description: description.to_string(),
+                developer_instructions: developer_instructions.to_string(),
+            });
+        }
+    }
+
+    if !cleaned.is_empty() {
+        return Ok(GeneratedAgentConfiguration {
+            description: cleaned,
+            developer_instructions: String::new(),
+        });
+    }
+
+    Err("No valid agent configuration was generated".to_string())
 }
 
 pub(crate) fn parse_run_metadata_value(raw: &str) -> Result<Value, String> {
@@ -258,6 +396,7 @@ pub(crate) async fn run_background_prompt_core<F>(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: String,
     prompt: String,
+    model: Option<&str>,
     on_hide_thread: F,
     timeout_error: &str,
     turn_error_fallback: &str,
@@ -315,13 +454,16 @@ where
         callbacks.insert(thread_id.clone(), tx);
     }
 
-    let turn_params = json!({
+    let mut turn_params = json!({
         "threadId": thread_id,
         "input": [{ "type": "text", "text": prompt }],
         "cwd": session.entry.path,
         "approvalPolicy": "never",
         "sandboxPolicy": { "type": "readOnly" },
     });
+    if let Some(model_id) = model {
+        turn_params["model"] = json!(model_id);
+    }
     let turn_result = session.send_request("turn/start", turn_params).await;
     let turn_result = match turn_result {
         Ok(result) => result,
@@ -408,6 +550,7 @@ pub(crate) async fn generate_commit_message_core<F>(
     workspace_id: String,
     diff: &str,
     template: &str,
+    model: Option<&str>,
     on_hide_thread: F,
 ) -> Result<String, String>
 where
@@ -418,6 +561,7 @@ where
         sessions,
         workspace_id,
         prompt,
+        model,
         on_hide_thread,
         "Timeout waiting for commit message generation",
         "Unknown error during commit message generation",
@@ -444,6 +588,7 @@ where
         sessions,
         workspace_id,
         metadata_prompt,
+        None,
         on_hide_thread,
         "Timeout waiting for metadata generation",
         "Unknown error during metadata generation",
@@ -453,9 +598,41 @@ where
     parse_run_metadata_value(&response)
 }
 
+pub(crate) async fn generate_agent_description_core<F>(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    description: &str,
+    on_hide_thread: F,
+) -> Result<GeneratedAgentConfiguration, String>
+where
+    F: Fn(&str, &str),
+{
+    let cleaned_description = description.trim();
+    if cleaned_description.is_empty() {
+        return Err("Description is required.".to_string());
+    }
+
+    let prompt = build_agent_description_prompt(cleaned_description);
+    let response = run_background_prompt_core(
+        sessions,
+        workspace_id,
+        prompt,
+        None,
+        on_hide_thread,
+        "Timeout waiting for agent configuration generation",
+        "Unknown error during agent configuration generation",
+    )
+    .await?;
+
+    parse_agent_description_value(&response)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{build_commit_message_prompt_for_diff, parse_run_metadata_value};
+    use super::{
+        build_commit_message_prompt_for_diff, parse_agent_description_value,
+        parse_run_metadata_value,
+    };
 
     #[test]
     fn build_commit_message_prompt_for_diff_requires_changes() {
@@ -468,7 +645,8 @@ mod tests {
 
     #[test]
     fn parse_run_metadata_value_normalizes_worktree_name_alias() {
-        let raw = r#"{"title":"Fix Login Redirect Loop","worktree_name":"fix-login-redirect-loop"}"#;
+        let raw =
+            r#"{"title":"Fix Login Redirect Loop","worktree_name":"fix-login-redirect-loop"}"#;
         let parsed = parse_run_metadata_value(raw).expect("parse metadata");
         assert_eq!(parsed["title"], "Fix Login Redirect Loop");
         assert_eq!(parsed["worktreeName"], "fix/login-redirect-loop");
@@ -482,5 +660,45 @@ mod tests {
             result.expect_err("should fail"),
             "Missing title in metadata"
         );
+    }
+
+    #[test]
+    fn parse_agent_description_value_parses_json_shape() {
+        let raw = r#"{"description":"Researches large codebases","developerInstructions":"Map relevant modules first.\nSummarize findings before proposing edits.\nCall out risks and unknowns."}"#;
+        let parsed = parse_agent_description_value(raw).expect("parse description");
+        assert_eq!(parsed.description, "Researches large codebases");
+        assert!(parsed
+            .developer_instructions
+            .contains("Map relevant modules first."));
+    }
+
+    #[test]
+    fn parse_agent_description_value_handles_labeled_fallback() {
+        let raw = "Description: Stabilizes flaky test suites\nDeveloper Instructions: Reproduce failures first.\nAdd targeted regression tests.";
+        let parsed = parse_agent_description_value(raw).expect("parse description");
+        assert_eq!(parsed.description, "Stabilizes flaky test suites");
+        assert_eq!(
+            parsed.developer_instructions,
+            "Reproduce failures first.\nAdd targeted regression tests."
+        );
+    }
+
+    #[test]
+    fn parse_agent_description_value_allows_partial_output() {
+        let raw = r#"{"description":"Refactors large React components"}"#;
+        let parsed = parse_agent_description_value(raw).expect("parse partial");
+        assert_eq!(parsed.description, "Refactors large React components");
+        assert_eq!(parsed.developer_instructions, "");
+    }
+
+    #[test]
+    fn parse_agent_description_value_accepts_single_line_plain_text() {
+        let raw = "Refactors large React components for performance";
+        let parsed = parse_agent_description_value(raw).expect("parse single-line fallback");
+        assert_eq!(
+            parsed.description,
+            "Refactors large React components for performance"
+        );
+        assert_eq!(parsed.developer_instructions, "");
     }
 }

@@ -30,21 +30,18 @@ const baseProps = {
   isThreadPinned: () => true,
   onSelectThread: vi.fn(),
   onShowThreadMenu: vi.fn(),
-  onOpenThreadMenu: vi.fn(),
 };
 
 describe("PinnedThreadList", () => {
   it("renders pinned rows and handles click/context menu", () => {
     const onSelectThread = vi.fn();
     const onShowThreadMenu = vi.fn();
-    const onOpenThreadMenu = vi.fn();
 
     render(
       <PinnedThreadList
         {...baseProps}
         onSelectThread={onSelectThread}
         onShowThreadMenu={onShowThreadMenu}
-        onOpenThreadMenu={onOpenThreadMenu}
       />,
     );
 
@@ -69,15 +66,6 @@ describe("PinnedThreadList", () => {
       "thread-1",
       true,
     );
-
-    const menuButton = screen.getByRole("button", { name: "Thread actions" });
-    fireEvent.click(menuButton);
-    expect(onOpenThreadMenu).toHaveBeenCalledWith(
-      expect.anything(),
-      "ws-1",
-      "thread-1",
-      true,
-    );
   });
 
   it("routes callbacks for rows across workspaces", () => {
@@ -93,7 +81,6 @@ describe("PinnedThreadList", () => {
         ]}
         onSelectThread={onSelectThread}
         onShowThreadMenu={onShowThreadMenu}
-        onOpenThreadMenu={vi.fn()}
       />,
     );
 
