@@ -9,6 +9,94 @@ type UseThreadLinkingOptions = {
   onSubagentThreadDetected?: (workspaceId: string, threadId: string) => void;
 };
 
+function normalizeThreadId(value: unknown) {
+  return asString(value).trim();
+}
+
+function normalizeThreadIdsFromAgentRefs(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return "";
+      }
+      const record = entry as Record<string, unknown>;
+      const nestedThread =
+        record.thread && typeof record.thread === "object"
+          ? (record.thread as Record<string, unknown>)
+          : null;
+      return normalizeThreadId(
+        record.threadId ??
+          record.thread_id ??
+          record.id ??
+          nestedThread?.id ??
+          nestedThread?.threadId ??
+          nestedThread?.thread_id,
+      );
+    })
+    .filter(Boolean);
+}
+
+function normalizeThreadIdsFromAgentStatuses(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return "";
+      }
+      const record = entry as Record<string, unknown>;
+      const nestedThread =
+        record.thread && typeof record.thread === "object"
+          ? (record.thread as Record<string, unknown>)
+          : null;
+      return normalizeThreadId(
+        record.threadId ??
+          record.thread_id ??
+          record.id ??
+          nestedThread?.id ??
+          nestedThread?.threadId ??
+          nestedThread?.thread_id,
+      );
+    })
+    .filter(Boolean);
+}
+
+function normalizeThreadIdsFromStatusMap(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+  return Object.keys(value as Record<string, unknown>)
+    .map((key) => normalizeThreadId(key))
+    .filter(Boolean);
+}
+
+function hasCollabLinkHints(item: Record<string, unknown>) {
+  return Boolean(
+    item.senderThreadId ??
+      item.sender_thread_id ??
+      item.receiverThreadId ??
+      item.receiver_thread_id ??
+      item.receiverThreadIds ??
+      item.receiver_thread_ids ??
+      item.newThreadId ??
+      item.new_thread_id ??
+      item.receiverAgents ??
+      item.receiver_agents ??
+      item.receiverAgent ??
+      item.receiver_agent ??
+      item.agentStatuses ??
+      item.agent_statuses ??
+      item.agentStatus ??
+      item.agentsStates ??
+      item.agents_states ??
+      item.statuses,
+  );
+}
+
 export function useThreadLinking({
   dispatch,
   threadParentById,
@@ -62,7 +150,9 @@ export function useThreadLinking({
       item: Record<string, unknown>,
     ) => {
       const itemType = asString(item?.type ?? "");
-      if (itemType !== "collabToolCall" && itemType !== "collabAgentToolCall") {
+      const isCollabType =
+        itemType === "collabToolCall" || itemType === "collabAgentToolCall";
+      if (!isCollabType && !hasCollabLinkHints(item)) {
         return;
       }
       const sender = asString(item.senderThreadId ?? item.sender_thread_id ?? "");
@@ -70,11 +160,26 @@ export function useThreadLinking({
       if (!parentId) {
         return;
       }
-      const receivers = [
-        ...normalizeStringList(item.receiverThreadId ?? item.receiver_thread_id),
-        ...normalizeStringList(item.receiverThreadIds ?? item.receiver_thread_ids),
-        ...normalizeStringList(item.newThreadId ?? item.new_thread_id),
-      ];
+      const receivers = Array.from(
+        new Set([
+          ...normalizeStringList(item.receiverThreadId ?? item.receiver_thread_id),
+          ...normalizeStringList(item.receiverThreadIds ?? item.receiver_thread_ids),
+          ...normalizeStringList(item.newThreadId ?? item.new_thread_id),
+          ...normalizeThreadIdsFromAgentRefs(
+            item.receiverAgent || item.receiver_agent
+              ? [item.receiverAgent ?? item.receiver_agent]
+              : [],
+          ),
+          ...normalizeThreadIdsFromAgentRefs(item.receiverAgents ?? item.receiver_agents),
+          ...normalizeThreadIdsFromAgentStatuses(
+            item.agentStatuses ?? item.agent_statuses,
+          ),
+          ...normalizeThreadIdsFromStatusMap(item.statuses),
+          ...normalizeThreadIdsFromStatusMap(
+            item.agentStatus ?? item.agentsStates ?? item.agents_states,
+          ),
+        ]),
+      );
       updateThreadParent(parentId, receivers);
       receivers.forEach((receiver) => {
         if (!receiver) {

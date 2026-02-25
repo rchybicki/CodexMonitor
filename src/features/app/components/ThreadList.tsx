@@ -35,12 +35,6 @@ type ThreadListProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
-  onOpenThreadMenu?: (
-    event: MouseEvent,
-    workspaceId: string,
-    threadId: string,
-    canPin: boolean,
-  ) => void;
 };
 
 export function ThreadList({
@@ -64,9 +58,7 @@ export function ThreadList({
   onLoadOlderThreads,
   onSelectThread,
   onShowThreadMenu,
-  onOpenThreadMenu,
 }: ThreadListProps) {
-  const openThreadMenu = onOpenThreadMenu ?? onShowThreadMenu;
   const indentUnit = nested ? 10 : 14;
 
   return (
@@ -87,7 +79,6 @@ export function ThreadList({
           isThreadPinned={isThreadPinned}
           onSelectThread={onSelectThread}
           onShowThreadMenu={onShowThreadMenu}
-          onOpenThreadMenu={openThreadMenu}
         />
       ))}
       {pinnedRows.length > 0 && unpinnedRows.length > 0 && (
@@ -109,7 +100,6 @@ export function ThreadList({
           isThreadPinned={isThreadPinned}
           onSelectThread={onSelectThread}
           onShowThreadMenu={onShowThreadMenu}
-          onOpenThreadMenu={openThreadMenu}
         />
       ))}
       {totalThreadRoots > 3 && (

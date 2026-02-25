@@ -74,34 +74,67 @@ Run in dev mode:
 npm run tauri:dev
 ```
 
-## Mobile Support (WIP)
+## iOS Support (WIP)
 
-Mobile support is currently in progress for iOS and Android.
+iOS support is currently in progress.
 
-- Current status: mobile layout runs, remote backend flow is wired, and mobile builds default to remote backend mode.
+- Current status: mobile layout runs, remote backend flow is wired, and iOS defaults to remote backend mode.
 - Current limits: terminal and dictation remain unavailable on mobile builds.
 - Desktop behavior is unchanged: macOS/Linux/Windows remain local-first unless remote mode is explicitly selected.
 
-### Mobile + Tailscale Setup (TCP)
+### iOS + Tailscale Setup (TCP)
 
-Use this when connecting the mobile app (iOS/Android) to a desktop-hosted daemon over your Tailscale tailnet.
+Use this when connecting the iOS app to a desktop-hosted daemon over your Tailscale tailnet.
+Canonical runbook: `docs/mobile-ios-tailscale-blueprint.md`.
 
-1. Install and sign in to Tailscale on desktop and your mobile device (same tailnet).
+1. Install and sign in to Tailscale on both desktop and iPhone (same tailnet).
 2. On desktop CodexMonitor, open `Settings > Server`.
-3. Keep `Remote provider` set to `TCP (wip)`.
-4. Set a `Remote backend token`.
-5. Start the desktop daemon with `Start daemon` (in `Mobile access daemon`).
-6. In `Tailscale helper`, use `Detect Tailscale` and note the suggested host (for example `your-mac.your-tailnet.ts.net:4732`).
-7. On mobile CodexMonitor, open `Settings > Server`.
-8. Set `Connection type` to `TCP`.
-9. Enter the desktop Tailscale host and the same token.
-10. Tap `Connect & test` and confirm it succeeds.
+3. Set a `Remote backend token`.
+4. Start the desktop daemon with `Start daemon` (in `Mobile access daemon`).
+5. In `Tailscale helper`, use `Detect Tailscale` and note the suggested host (for example `your-mac.your-tailnet.ts.net:4732`).
+6. On iOS CodexMonitor, open `Settings > Server`.
+7. Enter the desktop Tailscale host and the same token.
+8. Tap `Connect & test` and confirm it succeeds.
 
 Notes:
 
-- The desktop daemon must stay running while mobile clients are connected.
+- The desktop daemon must stay running while iOS is connected.
 - If the test fails, confirm both devices are online in Tailscale and that host/token match desktop settings.
-- If you want to use Orbit instead of Tailscale TCP, switch `Connection type` to `Orbit` on mobile and use your desktop Orbit websocket URL/token.
+
+### Headless Daemon Management (No Desktop UI)
+
+Use the standalone daemon control CLI when you want iOS remote mode without keeping the desktop app open.
+
+Build binaries:
+
+```bash
+cd src-tauri
+cargo build --bin codex_monitor_daemon --bin codex_monitor_daemonctl
+```
+
+Examples:
+
+```bash
+# Show current daemon status
+./target/debug/codex_monitor_daemonctl status
+
+# Start daemon using host/token from settings.json
+./target/debug/codex_monitor_daemonctl start
+
+# Stop daemon
+./target/debug/codex_monitor_daemonctl stop
+
+# Print equivalent daemon start command
+./target/debug/codex_monitor_daemonctl command-preview
+```
+
+Useful overrides:
+
+- `--data-dir <path>`: app data dir containing `settings.json` / `workspaces.json`
+- `--listen <addr>`: bind address override
+- `--token <token>`: token override
+- `--daemon-path <path>`: explicit `codex-monitor-daemon` binary path
+- `--json`: machine-readable output
 
 ### iOS Prerequisites
 
@@ -115,8 +148,10 @@ rustup target add x86_64-apple-ios
 ```
 
 - Apple signing configured (development team).
-  - Set `bundle.iOS.developmentTeam` in `src-tauri/tauri.ios.conf.json` (preferred), or
+  - Set `bundle.iOS.developmentTeam` and `identifier` in `src-tauri/tauri.ios.local.conf.json` (preferred for local machine setup), or
+  - set values in `src-tauri/tauri.ios.conf.json`, or
   - pass `--team <TEAM_ID>` to the device script.
+  - `build_run_ios*.sh` and `release_testflight_ios.sh` automatically merge `src-tauri/tauri.ios.local.conf.json` when present.
 
 ### Run on iOS Simulator
 
@@ -131,7 +166,7 @@ Options:
 - `--skip-build` to reuse the current app bundle.
 - `--no-clean` to preserve `src-tauri/gen/apple/build` between builds.
 
-### Run on iOS USB Device
+### Run on USB Device
 
 List discoverable devices:
 
@@ -161,105 +196,6 @@ If signing is not ready yet, open Xcode from the script flow:
 
 ```bash
 ./scripts/build_run_ios_device.sh --open-xcode
-```
-
-### Android Prerequisites
-
-- Android Studio installed with Android SDK + SDK Platform + SDK Platform Tools.
-- Android command line tools installed and `adb` available in `PATH`.
-- JDK 17 configured for Gradle/Android builds.
-- Rust Android targets installed:
-
-```bash
-rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-```
-
-- Android environment variables configured (typical setup):
-
-```bash
-export ANDROID_HOME="$HOME/Library/Android/sdk"
-export ANDROID_SDK_ROOT="$ANDROID_HOME"
-export NDK_HOME="$ANDROID_HOME/ndk/<installed-version>"
-```
-
-Android scripts auto-detect common SDK paths and the latest installed NDK, but explicit env vars are recommended for reproducible CI/dev setups.
-
-### Initialize Android Project Files
-
-```bash
-./scripts/init_android.sh
-```
-
-### Run on Android (Dev)
-
-List connected Android devices/emulators:
-
-```bash
-./scripts/build_run_android.sh --list-devices
-```
-
-Run dev mode on default/first available device:
-
-```bash
-./scripts/build_run_android.sh
-```
-
-Run dev mode on a specific device:
-
-```bash
-./scripts/build_run_android.sh --device "<device id or name>"
-```
-
-Optional:
-
-- Use `--host <lan-ip>` for physical-device testing when the dev server is on your local network.
-- Use `--open` to open Android Studio.
-- Use `--release` for release-mode run.
-
-### Build Android Artifacts (APK/AAB)
-
-```bash
-./scripts/build_android.sh
-```
-
-Common options:
-
-- `--target aarch64 --target x86_64` for specific ABIs.
-- `--split-per-abi` for split outputs.
-- `--apk-only` or `--aab-only` to limit artifact types.
-- `--debug` for debug build artifacts.
-
-Build outputs are generated under `src-tauri/gen/android/app/build/outputs/`.
-
-### Install on Android Phone
-
-Prerequisites on phone:
-
-1. Enable `Developer options`.
-2. Enable `USB debugging`.
-3. Connect phone via USB and authorize this computer on the phone prompt.
-
-Verify the device is visible:
-
-```bash
-./scripts/build_run_android.sh --list-devices
-```
-
-Build and install debug APK:
-
-```bash
-./scripts/build_android.sh --apk-only --debug
-./scripts/install_android_apk.sh --device "<device-id>"
-```
-
-The installer script also launches the app after install.
-
-Optional wireless adb (after first USB authorization):
-
-```bash
-adb -s "<device-id>" tcpip 5555
-adb connect "<phone-ip>:5555"
-./scripts/install_android_apk.sh --device "<phone-ip>:5555"
 ```
 
 ### iOS TestFlight Release (Scripted)
@@ -371,7 +307,7 @@ src-tauri/
 Frontend calls live in `src/services/tauri.ts` and map to commands in `src-tauri/src/lib.rs`. The current surface includes:
 
 - Settings/config/files: `get_app_settings`, `update_app_settings`, `get_codex_config_path`, `get_config_model`, `file_read`, `file_write`, `codex_doctor`, `menu_set_accelerators`.
-- Workspaces/worktrees: `list_workspaces`, `is_workspace_path_dir`, `add_workspace`, `add_clone`, `add_worktree`, `worktree_setup_status`, `worktree_setup_mark_ran`, `rename_worktree`, `rename_worktree_upstream`, `apply_worktree_changes`, `update_workspace_settings`, `update_workspace_codex_bin`, `remove_workspace`, `remove_worktree`, `connect_workspace`, `list_workspace_files`, `read_workspace_file`, `open_workspace_in`, `get_open_app_icon`.
+- Workspaces/worktrees: `list_workspaces`, `is_workspace_path_dir`, `add_workspace`, `add_clone`, `add_worktree`, `worktree_setup_status`, `worktree_setup_mark_ran`, `rename_worktree`, `rename_worktree_upstream`, `apply_worktree_changes`, `update_workspace_settings`, `remove_workspace`, `remove_worktree`, `connect_workspace`, `list_workspace_files`, `read_workspace_file`, `open_workspace_in`, `get_open_app_icon`.
 - Threads/turns/reviews: `start_thread`, `fork_thread`, `compact_thread`, `list_threads`, `resume_thread`, `archive_thread`, `set_thread_name`, `send_user_message`, `turn_interrupt`, `respond_to_server_request`, `start_review`, `remember_approval_rule`, `get_commit_message_prompt`, `generate_commit_message`, `generate_run_metadata`.
 - Account/models/collaboration: `model_list`, `account_rate_limits`, `account_read`, `skills_list`, `apps_list`, `collaboration_mode_list`, `codex_login`, `codex_login_cancel`, `list_mcp_server_status`.
 - Git/GitHub: `get_git_status`, `list_git_roots`, `get_git_diffs`, `get_git_log`, `get_git_commit_diff`, `get_git_remote`, `stage_git_file`, `stage_git_all`, `unstage_git_file`, `revert_git_file`, `revert_git_all`, `commit_git`, `push_git`, `pull_git`, `fetch_git`, `sync_git`, `list_git_branches`, `checkout_git_branch`, `create_git_branch`, `get_github_issues`, `get_github_pull_requests`, `get_github_pull_request_diff`, `get_github_pull_request_comments`.

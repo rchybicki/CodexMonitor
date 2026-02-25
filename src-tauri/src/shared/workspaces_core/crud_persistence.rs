@@ -14,12 +14,11 @@ use crate::shared::{git_core, worktree_core};
 use crate::storage::write_workspaces;
 use crate::types::{AppSettings, WorkspaceEntry, WorkspaceInfo, WorkspaceKind, WorkspaceSettings};
 
-use super::connect::kill_session_by_id;
+use super::connect::{kill_session_by_id, take_live_shared_session, workspace_session_spawn_lock};
 use super::helpers::normalize_setup_script;
 
 pub(crate) async fn add_workspace_core<F, Fut>(
     path: String,
-    codex_bin: Option<String>,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     app_settings: &Mutex<AppSettings>,
@@ -43,22 +42,30 @@ where
         id: Uuid::new_v4().to_string(),
         name: name.clone(),
         path: path.clone(),
-        codex_bin,
         kind: WorkspaceKind::Main,
         parent_id: None,
         worktree: None,
         settings: WorkspaceSettings::default(),
     };
 
-    let (default_bin, codex_args) = {
-        let settings = app_settings.lock().await;
+    let _spawn_guard = workspace_session_spawn_lock().lock().await;
+    let existing_session = take_live_shared_session(sessions).await;
+    let (session, spawned_new_session) = if let Some(existing_session) = existing_session {
+        (existing_session, false)
+    } else {
+        let (default_bin, codex_args) = {
+            let settings = app_settings.lock().await;
+            (
+                settings.codex_bin.clone(),
+                resolve_workspace_codex_args(&entry, None, Some(&settings)),
+            )
+        };
+        let codex_home = resolve_workspace_codex_home(&entry, None);
         (
-            settings.codex_bin.clone(),
-            resolve_workspace_codex_args(&entry, None, Some(&settings)),
+            spawn_session(entry.clone(), default_bin, codex_args, codex_home).await?,
+            true,
         )
     };
-    let codex_home = resolve_workspace_codex_home(&entry, None);
-    let session = spawn_session(entry.clone(), default_bin, codex_args, codex_home).await?;
 
     if let Err(error) = {
         let mut workspaces = workspaces.lock().await;
@@ -70,18 +77,22 @@ where
             let mut workspaces = workspaces.lock().await;
             workspaces.remove(&entry.id);
         }
-        let mut child = session.child.lock().await;
-        kill_child_process_tree(&mut child).await;
+        if spawned_new_session {
+            let mut child = session.child.lock().await;
+            kill_child_process_tree(&mut child).await;
+        }
         return Err(error);
     }
 
+    session
+        .register_workspace_with_path(&entry.id, Some(&entry.path))
+        .await;
     sessions.lock().await.insert(entry.id.clone(), session);
 
     Ok(WorkspaceInfo {
         id: entry.id,
         name: entry.name,
         path: entry.path,
-        codex_bin: entry.codex_bin,
         connected: true,
         kind: entry.kind,
         parent_id: entry.parent_id,
@@ -161,33 +172,51 @@ where
         .await;
     }
 
+    let clone_source_workspace_id = source_entry
+        .settings
+        .clone_source_workspace_id
+        .clone()
+        .or_else(|| {
+            if source_entry.kind.is_worktree() {
+                source_entry.parent_id.clone()
+            } else {
+                Some(source_entry.id.clone())
+            }
+        });
+
     let entry = WorkspaceEntry {
         id: Uuid::new_v4().to_string(),
         name: copy_name,
         path: destination_path_string,
-        codex_bin: source_entry.codex_bin.clone(),
         kind: WorkspaceKind::Main,
         parent_id: None,
         worktree: None,
         settings: WorkspaceSettings {
             group_id: inherited_group_id,
+            clone_source_workspace_id,
             ..WorkspaceSettings::default()
         },
     };
 
-    let (default_bin, codex_args) = {
-        let settings = app_settings.lock().await;
-        (
-            settings.codex_bin.clone(),
-            resolve_workspace_codex_args(&entry, None, Some(&settings)),
-        )
-    };
-    let codex_home = resolve_workspace_codex_home(&entry, None);
-    let session = match spawn_session(entry.clone(), default_bin, codex_args, codex_home).await {
-        Ok(session) => session,
-        Err(error) => {
-            let _ = tokio::fs::remove_dir_all(&destination_path).await;
-            return Err(error);
+    let _spawn_guard = workspace_session_spawn_lock().lock().await;
+    let existing_session = take_live_shared_session(sessions).await;
+    let (session, spawned_new_session) = if let Some(existing_session) = existing_session {
+        (existing_session, false)
+    } else {
+        let (default_bin, codex_args) = {
+            let settings = app_settings.lock().await;
+            (
+                settings.codex_bin.clone(),
+                resolve_workspace_codex_args(&entry, None, Some(&settings)),
+            )
+        };
+        let codex_home = resolve_workspace_codex_home(&entry, None);
+        match spawn_session(entry.clone(), default_bin, codex_args, codex_home).await {
+            Ok(session) => (session, true),
+            Err(error) => {
+                let _ = tokio::fs::remove_dir_all(&destination_path).await;
+                return Err(error);
+            }
         }
     };
 
@@ -201,19 +230,187 @@ where
             let mut workspaces = workspaces.lock().await;
             workspaces.remove(&entry.id);
         }
-        let mut child = session.child.lock().await;
-        kill_child_process_tree(&mut child).await;
+        if spawned_new_session {
+            let mut child = session.child.lock().await;
+            kill_child_process_tree(&mut child).await;
+        }
         let _ = tokio::fs::remove_dir_all(&destination_path).await;
         return Err(error);
     }
 
+    session
+        .register_workspace_with_path(&entry.id, Some(&entry.path))
+        .await;
     sessions.lock().await.insert(entry.id.clone(), session);
 
     Ok(WorkspaceInfo {
         id: entry.id,
         name: entry.name,
         path: entry.path,
-        codex_bin: entry.codex_bin,
+        connected: true,
+        kind: entry.kind,
+        parent_id: entry.parent_id,
+        worktree: entry.worktree,
+        settings: entry.settings,
+    })
+}
+
+fn default_repo_name_from_url(url: &str) -> Option<String> {
+    let trimmed = url.trim().trim_end_matches('/');
+    let tail = trimmed.rsplit('/').next()?.trim();
+    if tail.is_empty() {
+        return None;
+    }
+    let without_git_suffix = tail.strip_suffix(".git").unwrap_or(tail);
+    if without_git_suffix.is_empty() {
+        None
+    } else {
+        Some(without_git_suffix.to_string())
+    }
+}
+
+fn validate_target_folder_name(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("Target folder name is required.".to_string());
+    }
+
+    if trimmed.contains('/') || trimmed.contains('\\') {
+        return Err(
+            "Target folder name must be a single relative folder name without separators or traversal."
+                .to_string(),
+        );
+    }
+
+    let path = Path::new(trimmed);
+    match (path.components().next(), path.components().nth(1)) {
+        (Some(Component::Normal(_)), None) => Ok(trimmed.to_string()),
+        _ => Err(
+            "Target folder name must be a single relative folder name without separators or traversal."
+                .to_string(),
+        ),
+    }
+}
+
+pub(crate) async fn add_workspace_from_git_url_core<F, Fut>(
+    url: String,
+    destination_path: String,
+    target_folder_name: Option<String>,
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    app_settings: &Mutex<AppSettings>,
+    storage_path: &PathBuf,
+    spawn_session: F,
+) -> Result<WorkspaceInfo, String>
+where
+    F: Fn(WorkspaceEntry, Option<String>, Option<String>, Option<PathBuf>) -> Fut,
+    Fut: Future<Output = Result<Arc<WorkspaceSession>, String>>,
+{
+    let url = url.trim().to_string();
+    if url.is_empty() {
+        return Err("Remote Git URL is required.".to_string());
+    }
+    let destination_path = destination_path.trim().to_string();
+    if destination_path.is_empty() {
+        return Err("Destination folder is required.".to_string());
+    }
+    let destination_parent = PathBuf::from(&destination_path);
+    if !destination_parent.is_dir() {
+        return Err("Destination folder must be an existing directory.".to_string());
+    }
+
+    let folder_name = target_folder_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| default_repo_name_from_url(&url))
+        .ok_or_else(|| "Could not determine target folder name from URL.".to_string())?;
+    let folder_name = validate_target_folder_name(&folder_name)?;
+
+    let clone_path = destination_parent.join(folder_name);
+    if clone_path.exists() {
+        let is_empty = std::fs::read_dir(&clone_path)
+            .map_err(|err| format!("Failed to inspect destination path: {err}"))?
+            .next()
+            .is_none();
+        if !is_empty {
+            return Err("Destination path already exists and is not empty.".to_string());
+        }
+    }
+
+    let clone_path_string = clone_path.to_string_lossy().to_string();
+    if let Err(error) =
+        git_core::run_git_command(&destination_parent, &["clone", &url, &clone_path_string]).await
+    {
+        let _ = tokio::fs::remove_dir_all(&clone_path).await;
+        return Err(error);
+    }
+
+    let workspace_name = clone_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Workspace")
+        .to_string();
+    let entry = WorkspaceEntry {
+        id: Uuid::new_v4().to_string(),
+        name: workspace_name,
+        path: clone_path_string,
+        kind: WorkspaceKind::Main,
+        parent_id: None,
+        worktree: None,
+        settings: WorkspaceSettings::default(),
+    };
+
+    let _spawn_guard = workspace_session_spawn_lock().lock().await;
+    let existing_session = take_live_shared_session(sessions).await;
+    let (session, spawned_new_session) = if let Some(existing_session) = existing_session {
+        (existing_session, false)
+    } else {
+        let (default_bin, codex_args) = {
+            let settings = app_settings.lock().await;
+            (
+                settings.codex_bin.clone(),
+                resolve_workspace_codex_args(&entry, None, Some(&settings)),
+            )
+        };
+        let codex_home = resolve_workspace_codex_home(&entry, None);
+        match spawn_session(entry.clone(), default_bin, codex_args, codex_home).await {
+            Ok(session) => (session, true),
+            Err(error) => {
+                let _ = tokio::fs::remove_dir_all(&clone_path).await;
+                return Err(error);
+            }
+        }
+    };
+
+    if let Err(error) = {
+        let mut workspaces = workspaces.lock().await;
+        workspaces.insert(entry.id.clone(), entry.clone());
+        let list: Vec<_> = workspaces.values().cloned().collect();
+        write_workspaces(storage_path, &list)
+    } {
+        {
+            let mut workspaces = workspaces.lock().await;
+            workspaces.remove(&entry.id);
+        }
+        if spawned_new_session {
+            let mut child = session.child.lock().await;
+            kill_child_process_tree(&mut child).await;
+        }
+        let _ = tokio::fs::remove_dir_all(&clone_path).await;
+        return Err(error);
+    }
+
+    session
+        .register_workspace_with_path(&entry.id, Some(&entry.path))
+        .await;
+    sessions.lock().await.insert(entry.id.clone(), session);
+
+    Ok(WorkspaceInfo {
+        id: entry.id,
+        name: entry.name,
+        path: entry.path,
         connected: true,
         kind: entry.kind,
         parent_id: entry.parent_id,
@@ -495,10 +692,10 @@ pub(crate) async fn update_workspace_settings_core<FApplySettings, FSpawn, FutSp
     mut settings: WorkspaceSettings,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
-    app_settings: &Mutex<AppSettings>,
+    _app_settings: &Mutex<AppSettings>,
     storage_path: &PathBuf,
     apply_settings_update: FApplySettings,
-    spawn_session: FSpawn,
+    _spawn_session: FSpawn,
 ) -> Result<WorkspaceInfo, String>
 where
     FApplySettings: Fn(
@@ -511,134 +708,30 @@ where
 {
     settings.worktree_setup_script = normalize_setup_script(settings.worktree_setup_script);
 
-    let (
-        previous_entry,
-        entry_snapshot,
-        parent_entry,
-        previous_codex_home,
-        previous_codex_args,
-        previous_worktree_setup_script,
-        child_entries,
-    ) = {
+    let (entry_snapshot, previous_worktree_setup_script, child_entries) = {
         let mut workspaces = workspaces.lock().await;
         let previous_entry = workspaces
             .get(&id)
             .cloned()
             .ok_or_else(|| "workspace not found".to_string())?;
-        let previous_codex_home = previous_entry.settings.codex_home.clone();
-        let previous_codex_args = previous_entry.settings.codex_args.clone();
         let previous_worktree_setup_script = previous_entry.settings.worktree_setup_script.clone();
         let entry_snapshot = apply_settings_update(&mut workspaces, &id, settings)?;
-        let parent_entry = entry_snapshot
-            .parent_id
-            .as_ref()
-            .and_then(|parent_id| workspaces.get(parent_id))
-            .cloned();
         let child_entries = workspaces
             .values()
             .filter(|entry| entry.parent_id.as_deref() == Some(&id))
             .cloned()
             .collect::<Vec<_>>();
         (
-            previous_entry,
             entry_snapshot,
-            parent_entry,
-            previous_codex_home,
-            previous_codex_args,
             previous_worktree_setup_script,
             child_entries,
         )
     };
 
-    let codex_home_changed = previous_codex_home != entry_snapshot.settings.codex_home;
-    let codex_args_changed = previous_codex_args != entry_snapshot.settings.codex_args;
     let worktree_setup_script_changed =
         previous_worktree_setup_script != entry_snapshot.settings.worktree_setup_script;
     let connected = sessions.lock().await.contains_key(&id);
-    if connected && (codex_home_changed || codex_args_changed) {
-        let rollback_entry = previous_entry.clone();
-        let (default_bin, codex_args) = {
-            let settings = app_settings.lock().await;
-            (
-                settings.codex_bin.clone(),
-                resolve_workspace_codex_args(
-                    &entry_snapshot,
-                    parent_entry.as_ref(),
-                    Some(&settings),
-                ),
-            )
-        };
-        let codex_home = resolve_workspace_codex_home(&entry_snapshot, parent_entry.as_ref());
-        let new_session = match spawn_session(
-            entry_snapshot.clone(),
-            default_bin,
-            codex_args,
-            codex_home,
-        )
-        .await
-        {
-            Ok(session) => session,
-            Err(error) => {
-                let mut workspaces = workspaces.lock().await;
-                workspaces.insert(rollback_entry.id.clone(), rollback_entry);
-                return Err(error);
-            }
-        };
-        if let Some(old_session) = sessions
-            .lock()
-            .await
-            .insert(entry_snapshot.id.clone(), new_session)
-        {
-            let mut child = old_session.child.lock().await;
-            kill_child_process_tree(&mut child).await;
-        }
-    }
-    if codex_home_changed || codex_args_changed {
-        let app_settings_snapshot = app_settings.lock().await.clone();
-        let default_bin = app_settings_snapshot.codex_bin.clone();
-        for child in &child_entries {
-            let connected = sessions.lock().await.contains_key(&child.id);
-            if !connected {
-                continue;
-            }
-            let previous_child_home = resolve_workspace_codex_home(child, Some(&previous_entry));
-            let next_child_home = resolve_workspace_codex_home(child, Some(&entry_snapshot));
-            let previous_child_args = resolve_workspace_codex_args(
-                child,
-                Some(&previous_entry),
-                Some(&app_settings_snapshot),
-            );
-            let next_child_args = resolve_workspace_codex_args(
-                child,
-                Some(&entry_snapshot),
-                Some(&app_settings_snapshot),
-            );
-            if previous_child_home == next_child_home && previous_child_args == next_child_args {
-                continue;
-            }
-            let new_session = match spawn_session(
-                child.clone(),
-                default_bin.clone(),
-                next_child_args,
-                next_child_home,
-            )
-            .await
-            {
-                Ok(session) => session,
-                Err(error) => {
-                    eprintln!(
-                        "update_workspace_settings: respawn failed for worktree {} after parent override change: {error}",
-                        child.id
-                    );
-                    continue;
-                }
-            };
-            if let Some(old_session) = sessions.lock().await.insert(child.id.clone(), new_session) {
-                let mut child = old_session.child.lock().await;
-                kill_child_process_tree(&mut child).await;
-            }
-        }
-    }
+
     if worktree_setup_script_changed && !entry_snapshot.kind.is_worktree() {
         let child_ids = child_entries
             .iter()
@@ -663,7 +756,6 @@ where
         id: entry_snapshot.id,
         name: entry_snapshot.name,
         path: entry_snapshot.path,
-        codex_bin: entry_snapshot.codex_bin,
         connected,
         kind: entry_snapshot.kind,
         parent_id: entry_snapshot.parent_id,
@@ -672,39 +764,46 @@ where
     })
 }
 
-pub(crate) async fn update_workspace_codex_bin_core(
-    id: String,
-    codex_bin: Option<String>,
-    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
-    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
-    storage_path: &PathBuf,
-) -> Result<WorkspaceInfo, String> {
-    let (entry_snapshot, list) = {
-        let mut workspaces = workspaces.lock().await;
-        let entry_snapshot = match workspaces.get_mut(&id) {
-            Some(entry) => {
-                entry.codex_bin = codex_bin.clone();
-                entry.clone()
-            }
-            None => return Err("workspace not found".to_string()),
-        };
-        let list: Vec<_> = workspaces.values().cloned().collect();
-        (entry_snapshot, list)
-    };
-    write_workspaces(storage_path, &list)?;
+#[cfg(test)]
+mod tests {
+    use super::{default_repo_name_from_url, validate_target_folder_name};
 
-    let connected = sessions.lock().await.contains_key(&id);
-    Ok(WorkspaceInfo {
-        id: entry_snapshot.id,
-        name: entry_snapshot.name,
-        path: entry_snapshot.path,
-        codex_bin: entry_snapshot.codex_bin,
-        connected,
-        kind: entry_snapshot.kind,
-        parent_id: entry_snapshot.parent_id,
-        worktree: entry_snapshot.worktree,
-        settings: entry_snapshot.settings,
-    })
+    #[test]
+    fn derives_repo_name_from_https_url() {
+        assert_eq!(
+            default_repo_name_from_url("https://github.com/org/repo.git"),
+            Some("repo".to_string())
+        );
+    }
+
+    #[test]
+    fn derives_repo_name_from_ssh_url() {
+        assert_eq!(
+            default_repo_name_from_url("git@github.com:org/repo.git"),
+            Some("repo".to_string())
+        );
+    }
+
+    #[test]
+    fn accepts_single_relative_target_folder_name() {
+        assert_eq!(
+            validate_target_folder_name("my-project"),
+            Ok("my-project".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_target_folder_name_with_separators() {
+        let err =
+            validate_target_folder_name("nested/project").expect_err("name should be rejected");
+        assert!(err.contains("without separators"));
+    }
+
+    #[test]
+    fn rejects_target_folder_name_with_traversal() {
+        let err = validate_target_folder_name("../project").expect_err("name should be rejected");
+        assert!(err.contains("without separators or traversal"));
+    }
 }
 
 #[cfg(test)]

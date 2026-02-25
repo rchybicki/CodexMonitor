@@ -1,4 +1,4 @@
-# App-Server Events Reference (Codex `227352257c9cfb0f509b01dc1a30057c874bb93f`)
+# App-Server Events Reference (Codex `9501669a2485969a78b8bdea3da4b3b2a626e0d3`)
 
 This document helps agents quickly answer:
 - Which app-server events CodexMonitor supports right now.
@@ -12,6 +12,9 @@ When updating this document:
 3. Compare Codex client request methods vs CodexMonitor outgoing request methods.
 4. Compare Codex server request methods vs CodexMonitor inbound request handling.
 5. Update supported and missing lists below.
+
+Related project skill:
+- `.codex/skills/app-server-events-sync/SKILL.md`
 
 ## Where To Look In CodexMonitor
 

@@ -1,7 +1,7 @@
 {
   "name": "codex-monitor",
   "private": true,
-  "version": "0.7.57",
+  "version": "0.7.59",
   "type": "module",
   "scripts": {
     "sync:material-icons": "node scripts/sync-material-icons.mjs",
@@ -33,15 +33,7 @@
     "pretauri:dev:win": "npm run sync:material-icons",
     "tauri:dev:win": "npm run doctor:win && tauri dev --config src-tauri/tauri.windows.conf.json",
     "pretauri:build:win": "npm run sync:material-icons",
-    "tauri:build:win": "npm run doctor:win && tauri build --config src-tauri/tauri.windows.conf.json",
-    "pretauri:android:init": "npm run sync:material-icons",
-    "tauri:android:init": "tauri android init",
-    "pretauri:android:dev": "npm run sync:material-icons",
-    "tauri:android:dev": "tauri android dev",
-    "pretauri:android:build": "npm run sync:material-icons",
-    "tauri:android:build": "tauri android build",
-    "pretauri:android:run": "npm run sync:material-icons",
-    "tauri:android:run": "tauri android run"
+    "tauri:build:win": "npm run doctor:win && tauri build --config src-tauri/tauri.windows.conf.json"
   },
   "dependencies": {
     "@pierre/diffs": "^1.0.6",

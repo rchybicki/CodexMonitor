@@ -16,17 +16,12 @@ type PinnedThreadListProps = {
   activeThreadId: string | null;
   threadStatusById: ThreadStatusById;
   pendingUserInputKeys?: Set<string>;
+  getWorkspaceLabel?: (workspaceId: string) => string | null;
   getThreadTime: (thread: ThreadSummary) => string | null;
   getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onShowThreadMenu: (
-    event: MouseEvent,
-    workspaceId: string,
-    threadId: string,
-    canPin: boolean,
-  ) => void;
-  onOpenThreadMenu?: (
     event: MouseEvent,
     workspaceId: string,
     threadId: string,
@@ -40,14 +35,13 @@ export function PinnedThreadList({
   activeThreadId,
   threadStatusById,
   pendingUserInputKeys,
+  getWorkspaceLabel,
   getThreadTime,
   getThreadArgsBadge,
   isThreadPinned,
   onSelectThread,
   onShowThreadMenu,
-  onOpenThreadMenu,
 }: PinnedThreadListProps) {
-  const openThreadMenu = onOpenThreadMenu ?? onShowThreadMenu;
   return (
     <div className="thread-list pinned-thread-list">
       {rows.map(({ thread, depth, workspaceId }) => {
@@ -62,12 +56,12 @@ export function PinnedThreadList({
             activeThreadId={activeThreadId}
             threadStatusById={threadStatusById}
             pendingUserInputKeys={pendingUserInputKeys}
+            workspaceLabel={getWorkspaceLabel?.(workspaceId) ?? null}
             getThreadTime={getThreadTime}
             getThreadArgsBadge={getThreadArgsBadge}
             isThreadPinned={isThreadPinned}
             onSelectThread={onSelectThread}
             onShowThreadMenu={onShowThreadMenu}
-            onOpenThreadMenu={openThreadMenu}
           />
         );
       })}

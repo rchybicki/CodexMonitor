@@ -82,18 +82,20 @@ pub fn run() {
         {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
+        let is_x11 = !is_wayland && std::env::var_os("DISPLAY").is_some();
         // Work around sporadic blank WebKitGTK renders on X11 by disabling compositing mode.
-        if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+        // Keep Wayland untouched because this can interfere with input behavior on some setups.
+        if is_x11 && std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
     }
 
     #[cfg(desktop)]
     let builder = tauri::Builder::default()
-        .enable_macos_default_menu(false)
         .manage(menu::MenuItemRegistry::<tauri::Wry>::default())
-        .menu(menu::build_menu)
-        .on_menu_event(menu::handle_menu_event);
+        .on_menu_event(menu::handle_menu_event)
+        .enable_macos_default_menu(false)
+        .menu(menu::build_menu);
 
     #[cfg(not(desktop))]
     let builder = tauri::Builder::default();
@@ -112,6 +114,14 @@ pub fn run() {
         .setup(|app| {
             let state = state::AppState::load(&app.handle());
             app.manage(state);
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(main_window) = app.get_webview_window("main") {
+                    let _ = main_window.set_decorations(false);
+                    // Keep menu accelerators wired while suppressing a visible native menu bar.
+                    let _ = main_window.hide_menu();
+                }
+            }
             #[cfg(desktop)]
             {
                 let app_handle = app.handle().clone();
@@ -168,6 +178,7 @@ pub fn run() {
             settings::get_codex_config_path,
             files::file_read,
             files::file_write,
+            files::read_image_as_data_url,
             files::write_text_file,
             codex::get_config_model,
             menu::menu_set_accelerators,
@@ -187,7 +198,6 @@ pub fn run() {
             workspaces::rename_worktree_upstream,
             workspaces::apply_worktree_changes,
             workspaces::update_workspace_settings,
-            workspaces::update_workspace_codex_bin,
             workspaces::set_workspace_runtime_codex_args,
             codex::start_thread,
             codex::send_user_message,
@@ -277,6 +287,7 @@ pub fn run() {
             dictation::dictation_cancel,
             local_usage::local_usage_snapshot,
             notifications::is_macos_debug_build,
+            notifications::app_build_type,
             notifications::send_notification_fallback,
             tailscale::tailscale_status,
             tailscale::tailscale_daemon_command_preview,

@@ -61,6 +61,7 @@ type ComposerProps = {
   isProcessing: boolean;
   steerAvailable: boolean;
   followUpMessageBehavior: FollowUpMessageBehavior;
+  composerFollowUpHintEnabled: boolean;
   collaborationModes: { id: string; label: string }[];
   selectedCollaborationModeId: string | null;
   onSelectCollaborationMode: (id: string | null) => void;
@@ -105,6 +106,7 @@ type ComposerProps = {
   dictationState?: "idle" | "listening" | "processing";
   dictationLevel?: number;
   onToggleDictation?: () => void;
+  onCancelDictation?: () => void;
   onOpenDictationSettings?: () => void;
   dictationTranscript?: DictationTranscript | null;
   onDictationTranscriptHandled?: (id: string) => void;
@@ -168,6 +170,7 @@ export const Composer = memo(function Composer({
   isProcessing,
   steerAvailable,
   followUpMessageBehavior,
+  composerFollowUpHintEnabled,
   collaborationModes,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
@@ -212,6 +215,7 @@ export const Composer = memo(function Composer({
   dictationState = "idle",
   dictationLevel = 0,
   onToggleDictation,
+  onCancelDictation,
   onOpenDictationSettings,
   dictationTranscript = null,
   onDictationTranscriptHandled,
@@ -643,7 +647,7 @@ export const Composer = memo(function Composer({
         onEditQueued={onEditQueued}
         onDeleteQueued={onDeleteQueued}
       />
-      {isProcessing && (
+      {isProcessing && composerFollowUpHintEnabled && (
         <div className="composer-followup-hint" role="status" aria-live="polite">
           <div className="composer-followup-title">Follow-up behavior</div>
           <div className="composer-followup-copy">
@@ -693,6 +697,7 @@ export const Composer = memo(function Composer({
         dictationState={dictationState}
         dictationLevel={dictationLevel}
         onToggleDictation={onToggleDictation}
+        onCancelDictation={onCancelDictation}
         onOpenDictationSettings={onOpenDictationSettings}
         dictationError={dictationError}
         onDismissDictationError={onDismissDictationError}

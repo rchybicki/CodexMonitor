@@ -547,10 +547,8 @@ export function SettingsServerSection({
 
       <div className="settings-help">
         {isMobileSimplified
-          ? appSettings.remoteBackendProvider === "tcp"
-            ? "Use your own infrastructure only. On mobile, get the Tailscale hostname and token from your desktop CodexMonitor setup."
-            : "Use your own infrastructure only. On mobile, use the Orbit websocket URL and token configured on your desktop CodexMonitor setup."
-          : "Mobile access should stay scoped to your own infrastructure (tailnet or self-hosted Orbit). CodexMonitor does not provide hosted backend services."}
+          ? "Use your own infrastructure only. On iOS, get the Tailscale hostname and token from your desktop CodexMonitor setup."
+          : "Mobile access should stay scoped to your own infrastructure (tailnet). CodexMonitor does not provide hosted backend services."}
       </div>
       {addRemoteOpen && (
         <ModalShell
