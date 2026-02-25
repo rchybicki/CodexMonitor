@@ -23,6 +23,12 @@ type ThreadRowProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onOpenThreadMenu?: (
+    event: MouseEvent,
+    workspaceId: string,
+    threadId: string,
+    canPin: boolean,
+  ) => void;
 };
 
 const LONG_PRESS_MS = 500;
@@ -54,6 +60,7 @@ export function ThreadRow({
   isThreadPinned,
   onSelectThread,
   onShowThreadMenu,
+  onOpenThreadMenu,
 }: ThreadRowProps) {
   const relativeTime = getThreadTime(thread);
   const badge = getThreadArgsBadge?.(workspaceId, thread.id) ?? null;
@@ -76,6 +83,7 @@ export function ThreadRow({
   );
   const canPin = depth === 0;
   const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
+  const openThreadMenu = onOpenThreadMenu ?? onShowThreadMenu;
   const longPressRef = useRef<{
     timerId: number | null;
     pointerId: number | null;
@@ -146,7 +154,7 @@ export function ThreadRow({
       suppressNextClickRef.current = true;
       scheduleSuppressReset();
 
-      onShowThreadMenu(
+      openThreadMenu(
         {
           preventDefault: () => {},
           stopPropagation: () => {},

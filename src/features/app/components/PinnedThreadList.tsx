@@ -27,6 +27,12 @@ type PinnedThreadListProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onOpenThreadMenu?: (
+    event: MouseEvent,
+    workspaceId: string,
+    threadId: string,
+    canPin: boolean,
+  ) => void;
 };
 
 export function PinnedThreadList({
@@ -41,7 +47,9 @@ export function PinnedThreadList({
   isThreadPinned,
   onSelectThread,
   onShowThreadMenu,
+  onOpenThreadMenu,
 }: PinnedThreadListProps) {
+  const openThreadMenu = onOpenThreadMenu ?? onShowThreadMenu;
   return (
     <div className="thread-list pinned-thread-list">
       {rows.map(({ thread, depth, workspaceId }) => {
@@ -62,6 +70,7 @@ export function PinnedThreadList({
             isThreadPinned={isThreadPinned}
             onSelectThread={onSelectThread}
             onShowThreadMenu={onShowThreadMenu}
+            onOpenThreadMenu={openThreadMenu}
           />
         );
       })}

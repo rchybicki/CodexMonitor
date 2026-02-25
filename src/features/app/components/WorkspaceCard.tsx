@@ -11,6 +11,7 @@ type WorkspaceCardProps = {
   addMenuWidth: number;
   onSelectWorkspace: (id: string) => void;
   onShowWorkspaceMenu: (event: MouseEvent, workspaceId: string) => void;
+  onOpenWorkspaceMenu?: (event: MouseEvent, workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onToggleAddMenu: (anchor: {
@@ -45,11 +46,17 @@ export function WorkspaceCard({
   addMenuWidth,
   onSelectWorkspace,
   onShowWorkspaceMenu,
+  onOpenWorkspaceMenu,
   onToggleWorkspaceCollapse,
   onConnectWorkspace,
   onToggleAddMenu,
   children,
 }: WorkspaceCardProps) {
+  const openWorkspaceMenu =
+    onOpenWorkspaceMenu ??
+    ((event: MouseEvent, nextWorkspace: WorkspaceInfo) =>
+      onShowWorkspaceMenu(event, nextWorkspace.id));
+
   const contentCollapsedClass = isCollapsed ? " collapsed" : "";
   const longPressRef = useRef<{
     timerId: number | null;
@@ -121,7 +128,7 @@ export function WorkspaceCard({
       suppressNextClickRef.current = true;
       scheduleSuppressReset();
 
-      onShowWorkspaceMenu(
+      openWorkspaceMenu(
         {
           preventDefault: () => {},
           stopPropagation: () => {},
@@ -129,7 +136,7 @@ export function WorkspaceCard({
           clientY: current.startY,
           currentTarget: current.currentTarget,
         } as unknown as MouseEvent,
-        workspace.id,
+        workspace,
       );
     }, LONG_PRESS_MS);
   };

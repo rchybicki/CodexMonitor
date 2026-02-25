@@ -84,6 +84,7 @@ Do not blindly take `--theirs` for these files:
 
 These files carry Android touch long-press behavior for opening context menus.
 If conflicts occur, preserve long-press handling (`onPointerDown`/`onPointerMove`/`onPointerUp` + `LONG_PRESS_*`) while keeping upstream desktop right-click behavior.
+In `Sidebar.tsx`, preserve the mobile anchored popover state/handlers (`threadMenuAnchor` / `workspaceMenuAnchor` / `worktreeMenuAnchor`, `open*Menu`, and the `createPortal(<PopoverSurface ...>)` menu blocks). If these disappear, Android long-press will no-op even when pointer handlers still exist.
 
 Quick verification before build:
 

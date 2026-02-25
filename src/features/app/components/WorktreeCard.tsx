@@ -8,6 +8,7 @@ type WorktreeCardProps = {
   isDeleting?: boolean;
   onSelectWorkspace: (id: string) => void;
   onShowWorktreeMenu: (event: MouseEvent, worktree: WorkspaceInfo) => void;
+  onOpenWorktreeMenu?: (event: MouseEvent, worktree: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   children?: React.ReactNode;
@@ -33,10 +34,12 @@ export function WorktreeCard({
   isDeleting = false,
   onSelectWorkspace,
   onShowWorktreeMenu,
+  onOpenWorktreeMenu,
   onToggleWorkspaceCollapse,
   onConnectWorkspace,
   children,
 }: WorktreeCardProps) {
+  const openWorktreeMenu = onOpenWorktreeMenu ?? onShowWorktreeMenu;
   const worktreeCollapsed = worktree.settings.sidebarCollapsed;
   const worktreeBranch = worktree.worktree?.branch ?? "";
   const worktreeLabel = worktree.name?.trim() || worktreeBranch;
@@ -111,7 +114,7 @@ export function WorktreeCard({
       suppressNextClickRef.current = true;
       scheduleSuppressReset();
 
-      onShowWorktreeMenu(
+      openWorktreeMenu(
         {
           preventDefault: () => {},
           stopPropagation: () => {},
