@@ -70,6 +70,34 @@ git merge --no-ff upstream/main
 
 If the merge has conflicts, resolve them before continuing.
 
+### Merge Conflict Guardrails (Android long-press menus)
+
+Do not blindly take `--theirs` for these files:
+
+- `src/features/app/components/WorkspaceCard.tsx`
+- `src/features/app/components/WorktreeCard.tsx`
+- `src/features/app/components/ThreadRow.tsx`
+- `src/features/app/components/ThreadList.tsx`
+- `src/features/app/components/PinnedThreadList.tsx`
+- `src/features/app/components/WorktreeSection.tsx`
+- `src/features/app/components/Sidebar.tsx`
+
+These files carry Android touch long-press behavior for opening context menus.
+If conflicts occur, preserve long-press handling (`onPointerDown`/`onPointerMove`/`onPointerUp` + `LONG_PRESS_*`) while keeping upstream desktop right-click behavior.
+
+Quick verification before build:
+
+```bash
+rg -n "LONG_PRESS_|onPointerDown|onOpenWorkspaceMenu|onOpenWorktreeMenu|onOpenThreadMenu" \
+  src/features/app/components/WorkspaceCard.tsx \
+  src/features/app/components/WorktreeCard.tsx \
+  src/features/app/components/ThreadRow.tsx \
+  src/features/app/components/ThreadList.tsx \
+  src/features/app/components/PinnedThreadList.tsx \
+  src/features/app/components/WorktreeSection.tsx \
+  src/features/app/components/Sidebar.tsx
+```
+
 ## 3) Build Android Release APK (Only If Step 1 Has Changes)
 
 ```bash
