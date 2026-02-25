@@ -878,6 +878,18 @@
   overflow-y: auto;
 }
 
+.sidebar-thread-menu {
+  position: fixed;
+  isolation: isolate;
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  z-index: 9999;
+}
+
 .workspace-add-option {
   border: none;
   background: transparent;
