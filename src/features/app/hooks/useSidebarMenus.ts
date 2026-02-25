@@ -4,8 +4,8 @@ import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { WorkspaceInfo } from "../../../types";
+import { pushErrorToast } from "../../../services/toasts";
 import { fileManagerName } from "../../../utils/platformPaths";
-import { revealWorktreeInFileManager } from "../utils/revealWorktreeInFileManager";
 
 type SidebarMenuHandlers = {
   onDeleteThread: (workspaceId: string, threadId: string) => void;
@@ -15,7 +15,6 @@ type SidebarMenuHandlers = {
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onReloadWorkspaceThreads: (workspaceId: string) => void;
-  onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
 };
@@ -28,7 +27,6 @@ export function useSidebarMenus({
   isThreadPinned,
   onRenameThread,
   onReloadWorkspaceThreads,
-  onConnectWorkspace,
   onDeleteWorkspace,
   onDeleteWorktree,
 }: SidebarMenuHandlers) {
@@ -96,33 +94,23 @@ export function useSidebarMenus({
   );
 
   const showWorkspaceMenu = useCallback(
-    async (event: MouseEvent, workspace: WorkspaceInfo) => {
+    async (event: MouseEvent, workspaceId: string) => {
       event.preventDefault();
       event.stopPropagation();
-      const items: MenuItem[] = [];
-      if (!workspace.connected) {
-        items.push(
-          await MenuItem.new({
-            text: "Connect",
-            action: () => onConnectWorkspace(workspace),
-          }),
-        );
-      }
       const reloadItem = await MenuItem.new({
         text: "Reload threads",
-        action: () => onReloadWorkspaceThreads(workspace.id),
+        action: () => onReloadWorkspaceThreads(workspaceId),
       });
       const deleteItem = await MenuItem.new({
         text: "Delete",
-        action: () => onDeleteWorkspace(workspace.id),
+        action: () => onDeleteWorkspace(workspaceId),
       });
-      items.push(reloadItem, deleteItem);
-      const menu = await Menu.new({ items });
+      const menu = await Menu.new({ items: [reloadItem, deleteItem] });
       const window = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);
       await menu.popup(position, window);
     },
-    [onConnectWorkspace, onReloadWorkspaceThreads, onDeleteWorkspace],
+    [onReloadWorkspaceThreads, onDeleteWorkspace],
   );
 
   const showWorktreeMenu = useCallback(
@@ -130,34 +118,45 @@ export function useSidebarMenus({
       event.preventDefault();
       event.stopPropagation();
       const fileManagerLabel = fileManagerName();
-      const items: MenuItem[] = [];
-      if (!worktree.connected) {
-        items.push(
-          await MenuItem.new({
-            text: "Connect",
-            action: () => onConnectWorkspace(worktree),
-          }),
-        );
-      }
       const reloadItem = await MenuItem.new({
         text: "Reload threads",
         action: () => onReloadWorkspaceThreads(worktree.id),
       });
       const revealItem = await MenuItem.new({
         text: `Show in ${fileManagerLabel}`,
-        action: () => revealWorktreeInFileManager(worktree),
+        action: async () => {
+          if (!worktree.path) {
+            return;
+          }
+          try {
+            const { revealItemInDir } = await import(
+              "@tauri-apps/plugin-opener"
+            );
+            await revealItemInDir(worktree.path);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            pushErrorToast({
+              title: `Couldn't show worktree in ${fileManagerLabel}`,
+              message,
+            });
+            console.warn("Failed to reveal worktree", {
+              message,
+              workspaceId: worktree.id,
+              path: worktree.path,
+            });
+          }
+        },
       });
       const deleteItem = await MenuItem.new({
         text: "Delete worktree",
         action: () => onDeleteWorktree(worktree.id),
       });
-      items.push(reloadItem, revealItem, deleteItem);
-      const menu = await Menu.new({ items });
+      const menu = await Menu.new({ items: [reloadItem, revealItem, deleteItem] });
       const window = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);
       await menu.popup(position, window);
     },
-    [onConnectWorkspace, onReloadWorkspaceThreads, onDeleteWorktree],
+    [onReloadWorkspaceThreads, onDeleteWorktree],
   );
 
   const showCloneMenu = useCallback(
