@@ -236,6 +236,7 @@ function MainApp() {
     addWorkspacesFromPaths,
     mobileRemoteWorkspacePathPrompt,
     updateMobileRemoteWorkspacePathInput,
+    appendMobileRemoteWorkspacePathFromRecent,
     cancelMobileRemoteWorkspacePathPrompt,
     submitMobileRemoteWorkspacePathPrompt,
     addCloneAgent,
@@ -1843,6 +1844,17 @@ function MainApp() {
     sendUserMessageToThread,
   });
 
+  const selectedCommitEntry = useMemo(() => {
+    if (!selectedCommitSha) {
+      return null;
+    }
+    return (
+      [...gitLogAheadEntries, ...gitLogBehindEntries, ...gitLogEntries].find(
+        (entry) => entry.sha === selectedCommitSha,
+      ) ?? null
+    );
+  }, [gitLogAheadEntries, gitLogBehindEntries, gitLogEntries, selectedCommitSha]);
+
   const {
     handleSelectPullRequest,
     resetPullRequestSelection,
@@ -1852,6 +1864,7 @@ function MainApp() {
   } = usePullRequestComposer({
     activeWorkspace,
     selectedPullRequest,
+    selectedCommit: selectedCommitEntry,
     filePanelMode,
     gitPanelMode,
     centerMode,
@@ -1866,6 +1879,7 @@ function MainApp() {
     pullRequestReviewActions,
     pullRequestReviewLaunching: isLaunchingPullRequestReview,
     runPullRequestReview,
+    startReview,
     clearActiveImages,
     handleSend,
   });
@@ -2710,6 +2724,9 @@ function MainApp() {
         onWorkspaceFromUrlPromptConfirm={submitWorkspaceFromUrlPrompt}
         mobileRemoteWorkspacePathPrompt={mobileRemoteWorkspacePathPrompt}
         onMobileRemoteWorkspacePathPromptChange={updateMobileRemoteWorkspacePathInput}
+        onMobileRemoteWorkspacePathPromptRecentPathSelect={
+          appendMobileRemoteWorkspacePathFromRecent
+        }
         onMobileRemoteWorkspacePathPromptCancel={cancelMobileRemoteWorkspacePathPrompt}
         onMobileRemoteWorkspacePathPromptConfirm={submitMobileRemoteWorkspacePathPrompt}
         branchSwitcher={branchSwitcher}
