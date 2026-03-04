@@ -29,6 +29,9 @@ type ThreadRowProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  hasSubagentChildren?: boolean;
+  subagentsExpanded?: boolean;
+  onToggleSubagents?: (workspaceId: string, threadId: string) => void;
 };
 
 const LONG_PRESS_MS = 500;
@@ -61,6 +64,9 @@ export function ThreadRow({
   onSelectThread,
   onShowThreadMenu,
   onOpenThreadMenu,
+  hasSubagentChildren = false,
+  subagentsExpanded = true,
+  onToggleSubagents,
 }: ThreadRowProps) {
   const relativeTime = getThreadTime(thread);
   const badge = getThreadArgsBadge?.(workspaceId, thread.id) ?? null;
@@ -189,6 +195,7 @@ export function ThreadRow({
     }
     cancelLongPress();
   };
+  const canToggleSubagents = hasSubagentChildren && Boolean(onToggleSubagents);
 
   return (
     <div
@@ -196,7 +203,7 @@ export function ThreadRow({
         workspaceId === activeWorkspaceId && thread.id === activeThreadId
           ? "active"
           : ""
-      }`}
+      }${canToggleSubagents ? " has-subagent-children" : ""}`}
       style={indentStyle}
       onClick={(event) => {
         if (suppressNextClickRef.current) {
@@ -233,7 +240,26 @@ export function ThreadRow({
           </span>
         )}
         {badge && <span className="thread-args-badge">{badge}</span>}
-        {relativeTime && <span className="thread-time">{relativeTime}</span>}
+        {canToggleSubagents ? (
+          <button
+            type="button"
+            className={`thread-subagent-time-toggle ${subagentsExpanded ? "expanded" : ""}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleSubagents?.(workspaceId, thread.id);
+            }}
+            data-tauri-drag-region="false"
+            aria-label={subagentsExpanded ? "Hide sub-agents" : "Show sub-agents"}
+            aria-expanded={subagentsExpanded}
+          >
+            <span className="thread-subagent-time-label">{relativeTime ?? ""}</span>
+            <span className="thread-subagent-toggle-icon" aria-hidden>
+              ›
+            </span>
+          </button>
+        ) : (
+          relativeTime && <span className="thread-time">{relativeTime}</span>
+        )}
         <div className="thread-menu">
           <div className="thread-menu-trigger" aria-hidden="true" />
         </div>

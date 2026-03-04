@@ -1,8 +1,9 @@
-import type { MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 
 import type { ThreadSummary } from "../../../types";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
 import { ThreadRow } from "./ThreadRow";
+import { buildThreadRowVisibility } from "./threadRowVisibility";
 
 type PinnedThreadRow = {
   thread: ThreadSummary;
@@ -50,9 +51,33 @@ export function PinnedThreadList({
   onOpenThreadMenu,
 }: PinnedThreadListProps) {
   const openThreadMenu = onOpenThreadMenu ?? onShowThreadMenu;
+  const [collapsedThreadKeys, setCollapsedThreadKeys] = useState<Set<string>>(new Set());
+  const visibility = useMemo(
+    () =>
+      buildThreadRowVisibility(
+        rows,
+        (row) => collapsedThreadKeys.has(`${row.workspaceId}:${row.thread.id}`),
+      ),
+    [collapsedThreadKeys, rows],
+  );
+
+  const toggleThreadSubagents = (workspaceId: string, threadId: string) => {
+    const threadKey = `${workspaceId}:${threadId}`;
+    setCollapsedThreadKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(threadKey)) {
+        next.delete(threadKey);
+      } else {
+        next.add(threadKey);
+      }
+      return next;
+    });
+  };
   return (
     <div className="thread-list pinned-thread-list">
-      {rows.map(({ thread, depth, workspaceId }) => {
+      {visibility.visibleRows.map((row) => {
+        const { thread, depth, workspaceId } = row;
+        const threadKey = `${workspaceId}:${thread.id}`;
         return (
           <ThreadRow
             key={`${workspaceId}:${thread.id}`}
@@ -71,6 +96,9 @@ export function PinnedThreadList({
             onSelectThread={onSelectThread}
             onShowThreadMenu={onShowThreadMenu}
             onOpenThreadMenu={openThreadMenu}
+            hasSubagentChildren={visibility.rowsWithChildren.has(row)}
+            subagentsExpanded={!collapsedThreadKeys.has(threadKey)}
+            onToggleSubagents={toggleThreadSubagents}
           />
         );
       })}

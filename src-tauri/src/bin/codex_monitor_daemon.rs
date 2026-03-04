@@ -980,8 +980,10 @@ impl DaemonState {
         app: Option<String>,
         args: Vec<String>,
         command: Option<String>,
+        line: Option<u32>,
+        column: Option<u32>,
     ) -> Result<(), String> {
-        workspaces_core::open_workspace_in_core(path, app, args, command).await
+        workspaces_core::open_workspace_in_core(path, app, args, command, line, column).await
     }
 
     async fn get_open_app_icon(&self, app_name: String) -> Result<Option<String>, String> {
@@ -1663,6 +1665,7 @@ mod tests {
             pending: Mutex::new(HashMap::new()),
             request_context: Mutex::new(HashMap::new()),
             thread_workspace: Mutex::new(HashMap::new()),
+            hidden_thread_ids: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(0),
             background_thread_callbacks: Mutex::new(HashMap::new()),
             workspace_ids: Mutex::new(HashSet::from([owner_workspace_id.clone()])),
