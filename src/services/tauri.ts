@@ -11,6 +11,8 @@ import type {
   TcpDaemonStatus,
   TailscaleDaemonCommandPreview,
   TailscaleStatus,
+  TrayRecentThreadEntry,
+  TraySessionUsage,
   WorkspaceInfo,
   AppMention,
   WorkspaceSettings,
@@ -1065,6 +1067,14 @@ export async function setThreadName(
   name: string,
 ) {
   return invoke<any>("set_thread_name", { workspaceId, threadId, name });
+}
+
+export async function setTrayRecentThreads(entries: TrayRecentThreadEntry[]) {
+  return invoke<void>("set_tray_recent_threads", { entries });
+}
+
+export async function setTraySessionUsage(usage: TraySessionUsage | null) {
+  return invoke<void>("set_tray_session_usage", { usage });
 }
 
 export async function generateCommitMessage(
