@@ -26,15 +26,15 @@ Do not publish debug APKs, universal debug APKs, or AAB artifacts to Google Driv
 Fetch and list upstream commits not yet in your branch:
 
 ```bash
-git checkout android
+git checkout main
 git fetch upstream --prune
-git log --oneline --decorate --no-merges android..upstream/main
+git log --oneline --decorate --no-merges main..upstream/main
 ```
 
 Also list upstream-only affected files (from merge-base to upstream):
 
 ```bash
-MB="$(git merge-base android upstream/main)"
+MB="$(git merge-base main upstream/main)"
 git diff --name-only "$MB"..upstream/main
 ```
 
@@ -43,16 +43,16 @@ Record these two outputs in your run summary every time.
 No-op rule:
 
 - If `HEAD..upstream/main` is empty, stop.
-- If `android..upstream/main` is empty, stop.
+- If `main..upstream/main` is empty, stop.
 - Do not merge.
 - Do not build APK.
 - Do not publish to Google Drive.
-- Do not push to `origin/android`.
+- Do not push to `origin/main`.
 
 Optional shell gate:
 
 ```bash
-UPSTREAM_CHANGES="$(git log --oneline --no-merges android..upstream/main)"
+UPSTREAM_CHANGES="$(git log --oneline --no-merges main..upstream/main)"
 if [ -z "$UPSTREAM_CHANGES" ]; then
   echo "No upstream changes. Merge/build/publish skipped."
   exit 0
@@ -61,10 +61,10 @@ fi
 
 ## 2) Merge Upstream Into Your Branch (Only If Step 1 Has Changes)
 
-Use your Android branch (`android`) and merge (no rebase):
+Use your main branch (`main`) and merge (no rebase):
 
 ```bash
-git checkout android
+git checkout main
 git merge --no-ff upstream/main
 ```
 
@@ -154,8 +154,8 @@ Before installing on phone, delete the previously downloaded APK from the device
 
 When Step 1 found updates, include (using the Step 1 outputs captured before merge):
 
-1. Full upstream commit list from `git log android..upstream/main`
-2. Upstream changed files from `git diff --name-only "$(git merge-base android upstream/main)"..upstream/main`
+1. Full upstream commit list from `git log main..upstream/main`
+2. Upstream changed files from `git diff --name-only "$(git merge-base main upstream/main)"..upstream/main`
 3. Merge result and current branch SHA
 4. Release APK path, size, timestamp, and hash match
 5. Push status to `origin`
@@ -165,7 +165,7 @@ Also include:
 
 - Count of upstream commits applied in this run
 - Commit SHAs and subjects applied in this run
-- File-change count from `git diff --name-only "$(git merge-base android upstream/main)"..upstream/main | wc -l`
+- File-change count from `git diff --name-only "$(git merge-base main upstream/main)"..upstream/main | wc -l`
 
 When Step 1 found no updates, include:
 
@@ -180,7 +180,7 @@ When Step 1 found no updates, include:
 After merge:
 
 ```bash
-git push origin android
+git push origin main
 ```
 
 This updates only your fork branch and keeps `upstream` read-only.
