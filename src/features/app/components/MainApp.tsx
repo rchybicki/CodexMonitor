@@ -185,7 +185,7 @@ export default function MainApp() {
     queueSaveSettings,
     refreshWorkspaces,
   });
-  const updaterEnabled = !isMobileRuntime;
+  const updaterEnabled = !isMobileRuntime && __APP_UPDATER_ENABLED__;
 
   const workspacesById = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace])),

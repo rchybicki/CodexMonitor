@@ -351,7 +351,7 @@ export const Sidebar = memo(function Sidebar({
   const showAccountSwitcher = Boolean(activeWorkspaceId);
   const accountSwitchDisabled = accountSwitching || !activeWorkspaceId;
   const accountCancelDisabled = !accountSwitching || !activeWorkspaceId;
-  const refreshDisabled = workspaces.length === 0 || workspaces.every((workspace) => !workspace.connected);
+  const refreshDisabled = workspaces.length === 0;
   const refreshInProgress = workspaces.some(
     (workspace) => threadListLoadingByWorkspace[workspace.id] ?? false,
   );

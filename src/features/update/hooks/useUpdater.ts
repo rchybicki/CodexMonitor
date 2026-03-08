@@ -61,6 +61,7 @@ type UseUpdaterOptions = {
 };
 
 export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
+  const updaterEnabled = enabled && __APP_UPDATER_ENABLED__;
   const [state, setState] = useState<UpdateState>({ stage: "idle" });
   const [postUpdateNotice, setPostUpdateNotice] = useState<PostUpdateNoticeState>(
     null,
@@ -86,7 +87,7 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
   }, [clearLatestTimeout]);
 
   const checkForUpdates = useCallback(async (options?: { announceNoUpdate?: boolean }) => {
-    if (!enabled) {
+    if (!updaterEnabled) {
       return;
     }
     let update: Awaited<ReturnType<typeof check>> | null = null;
@@ -128,10 +129,10 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
         await update?.close();
       }
     }
-  }, [clearLatestTimeout, enabled, onDebug]);
+  }, [clearLatestTimeout, onDebug, updaterEnabled]);
 
   const startUpdate = useCallback(async () => {
-    if (!enabled) {
+    if (!updaterEnabled) {
       return;
     }
     const update = updateRef.current;
@@ -202,17 +203,17 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
         error: message,
       }));
     }
-  }, [checkForUpdates, enabled, onDebug]);
+  }, [checkForUpdates, onDebug, updaterEnabled]);
 
   useEffect(() => {
-    if (!enabled || import.meta.env.DEV || !isTauri()) {
+    if (!updaterEnabled || import.meta.env.DEV || !isTauri()) {
       return;
     }
     void checkForUpdates();
-  }, [checkForUpdates, enabled]);
+  }, [checkForUpdates, updaterEnabled]);
 
   useEffect(() => {
-    if (!enabled || !isTauri()) {
+    if (!updaterEnabled || !isTauri()) {
       return;
     }
     const pendingVersion = loadPendingPostUpdateVersion();
@@ -289,7 +290,7 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, onDebug]);
+  }, [onDebug, updaterEnabled]);
 
   useEffect(() => {
     return () => {

@@ -74,6 +74,19 @@ Run in dev mode:
 npm run tauri:dev
 ```
 
+Run as a separate local macOS dev app (different bundle id/name, updater disabled):
+
+```bash
+npm run tauri:dev:local
+```
+
+Build a standalone `Codex Monitor Dev.app` you can keep in the Dock:
+
+```bash
+npm run tauri:build:local
+open "src-tauri/target/release/bundle/macos/Codex Monitor Dev.app"
+```
+
 ## iOS Support (WIP)
 
 iOS support is currently in progress.

@@ -54,12 +54,12 @@ export function SettingsAboutSection() {
       try {
         const mobileRuntime = await isMobileRuntime();
         if (active) {
-          setUpdaterEnabled(!mobileRuntime);
+          setUpdaterEnabled(!mobileRuntime && __APP_UPDATER_ENABLED__);
         }
       } catch {
         if (active) {
           // In non-Tauri previews we still want local desktop-like behavior.
-          setUpdaterEnabled(true);
+          setUpdaterEnabled(__APP_UPDATER_ENABLED__);
         }
       }
     };
@@ -101,7 +101,9 @@ export function SettingsAboutSection() {
         </div>
         {!updaterEnabled && (
           <div className="settings-help">
-            Updates are unavailable in this runtime.
+            {__APP_UPDATER_ENABLED__
+              ? "Updates are unavailable in this runtime."
+              : "Updates are disabled for this local dev app."}
           </div>
         )}
 

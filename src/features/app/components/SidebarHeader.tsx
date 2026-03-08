@@ -239,10 +239,10 @@ export function SidebarHeader({
           className="ghost sidebar-refresh-toggle ds-tooltip-trigger"
           onClick={onRefreshAllThreads}
           data-tauri-drag-region="false"
-          aria-label="Refresh all workspace threads"
+          aria-label="Refresh projects and workspace threads"
           type="button"
-          title="Refresh all workspace threads"
-          data-tooltip="Refresh all workspace threads"
+          title="Refresh projects and workspace threads"
+          data-tooltip="Refresh projects and workspace threads"
           data-tooltip-align="end"
           data-tooltip-placement="bottom"
           disabled={refreshDisabled}

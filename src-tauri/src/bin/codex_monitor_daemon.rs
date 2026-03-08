@@ -62,7 +62,7 @@ mod files {
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::Read;
@@ -78,7 +78,6 @@ use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
 use backend::app_server::{spawn_workspace_session, WorkspaceSession};
 use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
-use shared::process_core::kill_child_process_tree;
 use shared::prompts_core::{self, CustomPromptEntry};
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
@@ -198,48 +197,25 @@ impl DaemonState {
         })
     }
 
-    async fn sync_workspaces_from_storage(&self) {
-        let stored = match read_workspaces(&self.storage_path) {
-            Ok(stored) => stored,
-            Err(err) => {
-                eprintln!(
-                    "daemon: failed to read workspaces from {}: {err}",
-                    self.storage_path.display()
-                );
-                return;
-            }
-        };
-        let workspace_ids: HashSet<String> = stored.keys().cloned().collect();
-        {
-            let mut workspaces = self.workspaces.lock().await;
-            *workspaces = stored;
-        }
-
-        let stale_sessions: Vec<(String, Arc<WorkspaceSession>)> = {
-            let mut sessions = self.sessions.lock().await;
-            sessions
-                .keys()
-                .filter(|id| !workspace_ids.contains(*id))
-                .cloned()
-                .collect::<Vec<_>>()
-                .into_iter()
-                .filter_map(|workspace_id| {
-                    sessions
-                        .remove(&workspace_id)
-                        .map(|session| (workspace_id, session))
-                })
-                .collect()
-        };
-
-        for (workspace_id, session) in stale_sessions {
-            let mut child = session.child.lock().await;
-            kill_child_process_tree(&mut child).await;
-            eprintln!("daemon: pruned stale session for removed workspace {workspace_id}");
-        }
-    }
-
     async fn list_workspaces(&self) -> Vec<WorkspaceInfo> {
-        self.sync_workspaces_from_storage().await;
+        if let Err(err) = workspaces_core::sync_workspaces_from_storage_core(
+            &self.workspaces,
+            &self.sessions,
+            &self.storage_path,
+        )
+        .await
+        {
+            eprintln!(
+                "daemon: failed to read workspaces from {}: {err}",
+                self.storage_path.display()
+            );
+        }
+        if let Err(err) =
+            workspaces_core::sync_external_worktrees_core(&self.workspaces, &self.storage_path)
+                .await
+        {
+            eprintln!("daemon: external worktree sync failed: {err}");
+        }
         workspaces_core::list_workspaces_core(&self.workspaces, &self.sessions).await
     }
 
@@ -757,8 +733,7 @@ impl DaemonState {
         limit: Option<u32>,
         sort_key: Option<String>,
     ) -> Result<Value, String> {
-        codex_core::list_threads_core(&self.sessions, workspace_id, cursor, limit, sort_key)
-            .await
+        codex_core::list_threads_core(&self.sessions, workspace_id, cursor, limit, sort_key).await
     }
 
     async fn list_mcp_server_status(
@@ -1561,6 +1536,7 @@ mod tests {
     use crate::storage::write_workspaces;
     use crate::types::WorkspaceKind;
     use serde_json::json;
+    use std::collections::HashSet;
     use std::future::Future;
     use std::path::PathBuf;
     use std::process::Stdio;

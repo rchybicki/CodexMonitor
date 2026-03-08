@@ -44,6 +44,14 @@ mod workspaces;
 static EXIT_CLEANUP_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 #[cfg(desktop)]
+pub(crate) fn updater_enabled() -> bool {
+    !matches!(
+        option_env!("CODEXMONITOR_UPDATER_ENABLED"),
+        Some("0") | Some("false") | Some("FALSE") | Some("False")
+    )
+}
+
+#[cfg(desktop)]
 fn keep_daemon_running_after_close(app_handle: &tauri::AppHandle) -> bool {
     let state = app_handle.state::<state::AppState>();
     tauri::async_runtime::block_on(async {
@@ -164,8 +172,10 @@ pub fn run() {
             }
             #[cfg(desktop)]
             {
-                app.handle()
-                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+                if updater_enabled() {
+                    app.handle()
+                        .plugin(tauri_plugin_updater::Builder::new().build())?;
+                }
             }
             Ok(())
         });

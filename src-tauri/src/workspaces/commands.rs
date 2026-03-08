@@ -86,6 +86,22 @@ pub(crate) async fn list_workspaces(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
+    if let Err(err) = workspaces_core::sync_workspaces_from_storage_core(
+        &state.workspaces,
+        &state.sessions,
+        &state.storage_path,
+    )
+    .await
+    {
+        eprintln!("list_workspaces: storage sync failed: {err}");
+    }
+
+    if let Err(err) =
+        workspaces_core::sync_external_worktrees_core(&state.workspaces, &state.storage_path).await
+    {
+        eprintln!("list_workspaces: external worktree sync failed: {err}");
+    }
+
     Ok(workspaces_core::list_workspaces_core(&state.workspaces, &state.sessions).await)
 }
 

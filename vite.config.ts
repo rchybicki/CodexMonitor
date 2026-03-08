@@ -60,6 +60,17 @@ const appCommitHash = resolveCommitHash();
 const appBuildDate = resolveBuildDate();
 const appGitBranch = resolveGitBranch();
 
+function resolveUpdaterEnabled() {
+  const raw = process.env.CODEXMONITOR_UPDATER_ENABLED;
+  if (typeof raw !== "string") {
+    return true;
+  }
+  const normalized = raw.trim().toLowerCase();
+  return !["0", "false", "no", "off"].includes(normalized);
+}
+
+const appUpdaterEnabled = resolveUpdaterEnabled();
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
@@ -81,6 +92,7 @@ export default defineConfig(async () => ({
     __APP_COMMIT_HASH__: JSON.stringify(appCommitHash),
     __APP_BUILD_DATE__: JSON.stringify(appBuildDate),
     __APP_GIT_BRANCH__: JSON.stringify(appGitBranch),
+    __APP_UPDATER_ENABLED__: JSON.stringify(appUpdaterEnabled),
   },
   test: {
     environment: "node",

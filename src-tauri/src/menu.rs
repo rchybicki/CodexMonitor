@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use serde::Deserialize;
-use tauri::menu::{Menu, MenuItemBuilder, PredefinedMenuItem, Submenu};
 use tauri::menu::MenuItem;
+use tauri::menu::{Menu, MenuItemBuilder, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, WebviewUrl, WebviewWindowBuilder};
 use tauri::{Manager, Runtime};
 
@@ -67,28 +67,47 @@ pub(crate) fn build_menu<R: tauri::Runtime>(
     let app_name = handle.package_info().name.clone();
     let about_item =
         MenuItemBuilder::with_id("about", format!("About {app_name}")).build(handle)?;
-    let check_updates_item =
-        MenuItemBuilder::with_id("check_for_updates", "Check for Updates...").build(handle)?;
     let settings_item = MenuItemBuilder::with_id("file_open_settings", "Settings...")
         .accelerator("CmdOrCtrl+,")
         .build(handle)?;
-    let app_menu = Submenu::with_items(
-        handle,
-        app_name.clone(),
-        true,
-        &[
-            &about_item,
-            &check_updates_item,
-            &settings_item,
-            &PredefinedMenuItem::separator(handle)?,
-            &PredefinedMenuItem::services(handle, None)?,
-            &PredefinedMenuItem::separator(handle)?,
-            &PredefinedMenuItem::hide(handle, None)?,
-            &PredefinedMenuItem::hide_others(handle, None)?,
-            &PredefinedMenuItem::separator(handle)?,
-            &PredefinedMenuItem::quit(handle, None)?,
-        ],
-    )?;
+    let app_menu = if crate::updater_enabled() {
+        let check_updates_item =
+            MenuItemBuilder::with_id("check_for_updates", "Check for Updates...").build(handle)?;
+        Submenu::with_items(
+            handle,
+            app_name.clone(),
+            true,
+            &[
+                &about_item,
+                &check_updates_item,
+                &settings_item,
+                &PredefinedMenuItem::separator(handle)?,
+                &PredefinedMenuItem::services(handle, None)?,
+                &PredefinedMenuItem::separator(handle)?,
+                &PredefinedMenuItem::hide(handle, None)?,
+                &PredefinedMenuItem::hide_others(handle, None)?,
+                &PredefinedMenuItem::separator(handle)?,
+                &PredefinedMenuItem::quit(handle, None)?,
+            ],
+        )?
+    } else {
+        Submenu::with_items(
+            handle,
+            app_name.clone(),
+            true,
+            &[
+                &about_item,
+                &settings_item,
+                &PredefinedMenuItem::separator(handle)?,
+                &PredefinedMenuItem::services(handle, None)?,
+                &PredefinedMenuItem::separator(handle)?,
+                &PredefinedMenuItem::hide(handle, None)?,
+                &PredefinedMenuItem::hide_others(handle, None)?,
+                &PredefinedMenuItem::separator(handle)?,
+                &PredefinedMenuItem::quit(handle, None)?,
+            ],
+        )?
+    };
 
     let new_agent_item = MenuItemBuilder::with_id("file_new_agent", "New Agent").build(handle)?;
     let new_worktree_agent_item =

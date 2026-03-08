@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Codex Monitor Dev",
+  "identifier": "com.dimillian.codexmonitor.dev",
+  "app": {
+    "windows": [
+      {
+        "title": "Codex Monitor Dev"
+      }
+    ]
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "macOS": {
+      "infoPlist": "./Info.dev.plist"
+    }
+  }
+}
