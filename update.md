@@ -1,10 +1,14 @@
 # Fork Update Process
 
-This process updates your fork from `upstream/main`, then publishes a new release APK only when upstream changed.
+This process updates your fork from `upstream/main`, publishes a new release APK when upstream changed, then rebuilds and relaunches the local macOS desktop app so your desktop install stays in sync with the merged code.
 
 Release destination (release APK only):
 
 `/Users/radoslawchybicki/Library/CloudStorage/GoogleDrive-rchybicki@gmail.com/My Drive/phone share/CodexMonitor/CodexMonitor-release.apk`
+
+Local macOS app bundle to rebuild/relaunch after merged updates:
+
+`src-tauri/target/release/bundle/macos/Codex Monitor Dev.app`
 
 Do not publish debug APKs, universal debug APKs, or AAB artifacts to Google Drive.
 
@@ -47,6 +51,7 @@ No-op rule:
 - Do not merge.
 - Do not build APK.
 - Do not publish to Google Drive.
+- Do not rebuild/restart the macOS app.
 - Do not push to `origin/main`.
 
 Optional shell gate:
@@ -150,30 +155,26 @@ stat -f "%N %z bytes" \
 
 Before installing on phone, delete the previously downloaded APK from the device and download it again from Google Drive to avoid stale cached files.
 
-## 5) Summarize Changes (Always Required)
+## 5) Rebuild And Restart macOS App (Only If Step 1 Has Changes)
 
-When Step 1 found updates, include (using the Step 1 outputs captured before merge):
+Rebuild the local macOS desktop app bundle:
 
-1. Full upstream commit list from `git log main..upstream/main`
-2. Upstream changed files from `git diff --name-only "$(git merge-base main upstream/main)"..upstream/main`
-3. Merge result and current branch SHA
-4. Release APK path, size, timestamp, and hash match
-5. Push status to `origin`
-6. Publish retry result (whether first copy succeeded or second attempt was needed)
+```bash
+npm run tauri:build:local
+```
 
-Also include:
+Quit the currently running local app if it is open, then relaunch the rebuilt bundle:
 
-- Count of upstream commits applied in this run
-- Commit SHAs and subjects applied in this run
-- File-change count from `git diff --name-only "$(git merge-base main upstream/main)"..upstream/main | wc -l`
+```bash
+osascript -e 'tell application "Codex Monitor Dev" to quit' || true
+open "src-tauri/target/release/bundle/macos/Codex Monitor Dev.app"
+```
 
-When Step 1 found no updates, include:
+Quick verification:
 
-1. `No upstream changes`
-2. `Merge skipped`
-3. `Build skipped`
-4. `Publish skipped`
-5. `Push skipped`
+```bash
+ls -lh "src-tauri/target/release/bundle/macos/Codex Monitor Dev.app"
+```
 
 ## 6) Push Updated Branch to Fork (Only If Step 1 Has Changes)
 
@@ -185,7 +186,35 @@ git push origin main
 
 This updates only your fork branch and keeps `upstream` read-only.
 
-## 7) Install Troubleshooting (`App not installed as package appears to be invalid`)
+## 7) Summarize Changes (Always Required)
+
+When Step 1 found updates, include (using the Step 1 outputs captured before merge):
+
+1. Full upstream commit list from `git log main..upstream/main`
+2. Upstream changed files from `git diff --name-only "$(git merge-base main upstream/main)"..upstream/main`
+3. Merge result and current branch SHA
+4. Release APK path, size, timestamp, and hash match
+5. macOS app rebuild status and relaunch status
+6. Push status to `origin`
+7. Publish retry result (whether first copy succeeded or second attempt was needed)
+
+Also include:
+
+- Count of upstream commits applied in this run
+- Commit SHAs and subjects applied in this run
+- File-change count from `git diff --name-only "$(git merge-base main upstream/main)"..upstream/main | wc -l`
+- Local macOS app bundle path used for relaunch
+
+When Step 1 found no updates, include:
+
+1. `No upstream changes`
+2. `Merge skipped`
+3. `Build skipped`
+4. `Publish skipped`
+5. `macOS rebuild/restart skipped`
+6. `Push skipped`
+
+## 8) Install Troubleshooting (`App not installed as package appears to be invalid`)
 
 Use this checklist when the APK is already built and published:
 

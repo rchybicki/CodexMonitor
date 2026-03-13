@@ -4,7 +4,7 @@ use crate::shared::settings_core::{
     get_app_settings_core, get_codex_config_path_core, update_app_settings_core,
 };
 use crate::state::AppState;
-use crate::types::{AppSettings, BackendMode};
+use crate::types::AppSettings;
 use crate::window;
 
 #[tauri::command]
@@ -60,7 +60,7 @@ async fn ensure_remote_runtime_for_settings(settings: &AppSettings, state: State
     if cfg!(any(target_os = "android", target_os = "ios")) {
         return;
     }
-    if !matches!(settings.backend_mode, BackendMode::Remote) {
+    if !crate::tailscale::should_auto_start_daemon(settings) {
         return;
     }
 

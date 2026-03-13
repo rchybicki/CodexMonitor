@@ -143,22 +143,20 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     let state = app_handle.state::<state::AppState>();
                     let settings = state.app_settings.lock().await.clone();
-                    if matches!(
+                    if tailscale::should_auto_start_daemon(&settings) {
+                        let state = app_handle.state::<state::AppState>();
+                        let _ = tailscale::tailscale_daemon_start(state).await;
+                    } else if matches!(
                         settings.remote_backend_provider,
                         crate::types::RemoteBackendProvider::Tcp
                     ) {
-                        if matches!(settings.backend_mode, crate::types::BackendMode::Remote) {
-                            // Remote mode: ensure daemon is up and version-current.
-                            let state = app_handle.state::<state::AppState>();
-                            let _ = tailscale::tailscale_daemon_start(state).await;
-                        } else {
-                            // Local mode: only enforce version if daemon is already running.
-                            let state = app_handle.state::<state::AppState>();
-                            if let Ok(status) = tailscale::tailscale_daemon_status(state).await {
-                                if matches!(status.state, crate::types::TcpDaemonState::Running) {
-                                    let state = app_handle.state::<state::AppState>();
-                                    let _ = tailscale::tailscale_daemon_start(state).await;
-                                }
+                        // Preserve existing version enforcement when a local-only daemon
+                        // is already running but launch-time autostart is not enabled.
+                        let state = app_handle.state::<state::AppState>();
+                        if let Ok(status) = tailscale::tailscale_daemon_status(state).await {
+                            if matches!(status.state, crate::types::TcpDaemonState::Running) {
+                                let state = app_handle.state::<state::AppState>();
+                                let _ = tailscale::tailscale_daemon_start(state).await;
                             }
                         }
                     }

@@ -18,7 +18,8 @@ use crate::daemon_binary::resolve_daemon_binary_path;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
 use crate::state::{AppState, TcpDaemonRuntime};
 use crate::types::{
-    TailscaleDaemonCommandPreview, TailscaleStatus, TcpDaemonState, TcpDaemonStatus,
+    AppSettings, BackendMode, RemoteBackendProvider, TailscaleDaemonCommandPreview,
+    TailscaleStatus, TcpDaemonState, TcpDaemonStatus,
 };
 
 use self::core as tailscale_core;
@@ -93,6 +94,16 @@ fn truncate_preview(value: &str, max_chars: usize) -> String {
     } else {
         preview
     }
+}
+
+pub(crate) fn should_auto_start_daemon(settings: &AppSettings) -> bool {
+    matches!(settings.remote_backend_provider, RemoteBackendProvider::Tcp)
+        && (matches!(settings.backend_mode, BackendMode::Remote)
+            || settings
+                .remote_backend_token
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty()))
 }
 
 fn tailscale_binary_candidates() -> Vec<OsString> {
@@ -521,10 +532,10 @@ pub(crate) async fn tailscale_status() -> Result<TailscaleStatus, String> {
 mod tests {
     use super::{
         daemon_listen_addr, ensure_listen_addr_available, looks_like_tailscale_version,
-        parse_port_from_remote_host, sync_tcp_daemon_listen_addr, tailscale_binary_candidates,
-        truncate_preview,
+        parse_port_from_remote_host, should_auto_start_daemon, sync_tcp_daemon_listen_addr,
+        tailscale_binary_candidates, truncate_preview,
     };
-    use crate::types::{TcpDaemonState, TcpDaemonStatus};
+    use crate::types::{AppSettings, BackendMode, TcpDaemonState, TcpDaemonStatus};
 
     #[test]
     fn includes_path_candidate() {
@@ -653,6 +664,27 @@ mod tests {
                 .expect_err("expected occupied port error");
             assert!(error.contains("unavailable"));
         });
+    }
+
+    #[test]
+    fn auto_start_daemon_when_remote_mode_is_enabled() {
+        let mut settings = AppSettings::default();
+        settings.backend_mode = BackendMode::Remote;
+        assert!(should_auto_start_daemon(&settings));
+    }
+
+    #[test]
+    fn auto_start_daemon_when_local_mode_has_tcp_token() {
+        let mut settings = AppSettings::default();
+        settings.backend_mode = BackendMode::Local;
+        settings.remote_backend_token = Some("token-123".to_string());
+        assert!(should_auto_start_daemon(&settings));
+    }
+
+    #[test]
+    fn does_not_auto_start_daemon_without_remote_mode_or_token() {
+        let settings = AppSettings::default();
+        assert!(!should_auto_start_daemon(&settings));
     }
 }
 
