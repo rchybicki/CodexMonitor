@@ -57,16 +57,22 @@ export type PostUpdateNoticeState = PostUpdateNotice | null;
 
 type UseUpdaterOptions = {
   enabled?: boolean;
+  autoCheckOnMount?: boolean;
   onDebug?: (entry: DebugEntry) => void;
 };
 
-export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
+export function useUpdater({
+  enabled = true,
+  autoCheckOnMount = true,
+  onDebug,
+}: UseUpdaterOptions) {
   const updaterEnabled = enabled && __APP_UPDATER_ENABLED__;
   const [state, setState] = useState<UpdateState>({ stage: "idle" });
   const [postUpdateNotice, setPostUpdateNotice] = useState<PostUpdateNoticeState>(
     null,
   );
   const updateRef = useRef<Update | null>(null);
+  const hasAttemptedAutoCheckRef = useRef(false);
   const postUpdateFetchGenerationRef = useRef(0);
   const latestTimeoutRef = useRef<number | null>(null);
   const latestToastDurationMs = 2000;
@@ -209,8 +215,16 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
     if (!updaterEnabled || import.meta.env.DEV || !isTauri()) {
       return;
     }
+    if (!autoCheckOnMount) {
+      return;
+    }
+    if (hasAttemptedAutoCheckRef.current) {
+      return;
+    }
+    hasAttemptedAutoCheckRef.current = true;
     void checkForUpdates();
   }, [checkForUpdates, updaterEnabled]);
+  }, [autoCheckOnMount, checkForUpdates, updaterEnabled]);
 
   useEffect(() => {
     if (!updaterEnabled || !isTauri()) {
