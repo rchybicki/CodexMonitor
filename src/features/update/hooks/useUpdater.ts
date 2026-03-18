@@ -223,7 +223,6 @@ export function useUpdater({
     }
     hasAttemptedAutoCheckRef.current = true;
     void checkForUpdates();
-  }, [checkForUpdates, updaterEnabled]);
   }, [autoCheckOnMount, checkForUpdates, updaterEnabled]);
 
   useEffect(() => {
