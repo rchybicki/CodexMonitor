@@ -43,6 +43,8 @@ export function WorktreeCard({
   const worktreeCollapsed = worktree.settings.sidebarCollapsed;
   const worktreeBranch = worktree.worktree?.branch ?? "";
   const worktreeLabel = worktree.name?.trim() || worktreeBranch;
+  const worktreeMeta =
+    worktreeBranch && worktreeBranch !== worktreeLabel ? worktreeBranch : null;
   const contentCollapsedClass = worktreeCollapsed ? " collapsed" : "";
   const longPressRef = useRef<{
     timerId: number | null;
@@ -186,7 +188,10 @@ export function WorktreeCard({
         onPointerUp={handleLongPressEnd}
         onPointerCancel={handleLongPressEnd}
       >
-        <div className="worktree-label">{worktreeLabel}</div>
+        <div className="worktree-copy">
+          <div className="worktree-label">{worktreeLabel}</div>
+          {worktreeMeta && <div className="worktree-meta">{worktreeMeta}</div>}
+        </div>
         <div className="worktree-actions">
           {isDeleting ? (
             <div className="worktree-deleting" role="status" aria-live="polite">

@@ -25,13 +25,13 @@ import {
 } from "@utils/threadItems";
 import { extractThreadCodexMetadata } from "@threads/utils/threadCodexMetadata";
 import {
-  asString,
-  normalizeRootPath,
-} from "@threads/utils/threadNormalize";
+  buildThreadSummaryFromThread,
+  extractThreadFromResponse,
+} from "@threads/utils/threadSummary";
+import { asString, normalizeRootPath } from "@threads/utils/threadNormalize";
 import {
   getParentThreadIdFromThread,
   getResumedTurnState,
-  isSubagentThreadSource,
   shouldHideSubagentThreadFromSidebar,
 } from "@threads/utils/threadRpc";
 import { saveThreadActivity } from "@threads/utils/threadStorage";
@@ -168,10 +168,13 @@ export function useThreadActions({
   threadStatusByIdRef.current = threadStatusById;
   activeTurnIdByThreadRef.current = activeTurnIdByThread;
 
-  const extractThreadId = useCallback((response: Record<string, any>) => {
-    const thread = response.result?.thread ?? response.thread ?? null;
-    return String(thread?.id ?? "");
-  }, []);
+  const extractThreadId = useCallback(
+    (response: Record<string, unknown> | null | undefined) => {
+      const thread = extractThreadFromResponse(response);
+      return String(thread?.id ?? "");
+    },
+    [],
+  );
 
   const startThreadForWorkspace = useCallback(
     async (workspaceId: string, options?: { activate?: boolean }) => {
@@ -265,12 +268,7 @@ export function useThreadActions({
           label: "thread/resume response",
           payload: response,
         });
-        const result = (response?.result ?? response) as
-          | Record<string, unknown>
-          | null;
-        const thread = (result?.thread ?? response?.thread ?? null) as
-          | Record<string, unknown>
-          | null;
+        const thread = extractThreadFromResponse(response);
         if (thread) {
           const codexMetadata = extractThreadCodexMetadata(thread);
           if (codexMetadata.modelId || codexMetadata.effort) {
@@ -507,36 +505,13 @@ export function useThreadActions({
       workspaceId: string,
       thread: Record<string, unknown>,
       fallbackIndex: number,
-    ): ThreadSummary | null => {
-      const id = String(thread?.id ?? "");
-      if (!id) {
-        return null;
-      }
-      const preview = asString(thread?.preview ?? "").trim();
-      const customName = getCustomName(workspaceId, id);
-      const fallbackName = `Agent ${fallbackIndex + 1}`;
-      const name = customName
-        ? customName
-        : preview.length > 0
-          ? preview.length > 38
-            ? `${preview.slice(0, 38)}…`
-            : preview
-          : fallbackName;
-      const metadata = extractThreadCodexMetadata(thread);
-      if (shouldHideSubagentThreadFromSidebar(thread.source)) {
-        return null;
-      }
-      const isSubagent = isSubagentThreadSource(thread.source);
-      return {
-        id,
-        name,
-        updatedAt: getThreadTimestamp(thread),
-        createdAt: getThreadCreatedTimestamp(thread),
-        ...(metadata.modelId ? { modelId: metadata.modelId } : {}),
-        ...(metadata.effort ? { effort: metadata.effort } : {}),
-        ...(isSubagent ? { isSubagent: true } : {}),
-      };
-    },
+    ): ThreadSummary | null =>
+      buildThreadSummaryFromThread({
+        workspaceId,
+        thread,
+        fallbackIndex,
+        getCustomName,
+      }),
     [getCustomName],
   );
 
