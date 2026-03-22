@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -74,6 +74,7 @@ pub(crate) async fn sync_external_worktrees_core(
 
     let mut additions = Vec::new();
     let mut renames = Vec::new();
+    let mut removals = HashSet::new();
 
     for parent in main_workspaces {
         let parent_path = PathBuf::from(&parent.path);
@@ -86,6 +87,10 @@ pub(crate) async fn sync_external_worktrees_core(
             Err(_) => continue,
         };
         let parent_path_key = normalize_path_key(&parent.path);
+        let listed_worktree_paths = listed
+            .iter()
+            .map(|worktree| normalize_path_key(&worktree.path))
+            .collect::<HashSet<_>>();
 
         for worktree in listed {
             let worktree_path_key = normalize_path_key(&worktree.path);
@@ -131,6 +136,12 @@ pub(crate) async fn sync_external_worktrees_core(
             existing_by_path.insert(worktree_path_key, entry.id.clone());
             additions.push(entry);
         }
+
+        removals.extend(stale_worktree_ids_for_parent(
+            &snapshot,
+            &parent.id,
+            &listed_worktree_paths,
+        ));
     }
 
     let mut workspaces = workspaces.lock().await;
@@ -155,6 +166,12 @@ pub(crate) async fn sync_external_worktrees_core(
         }
         workspaces.insert(entry.id.clone(), entry);
         changed = true;
+    }
+
+    for workspace_id in removals {
+        if workspaces.remove(&workspace_id).is_some() {
+            changed = true;
+        }
     }
 
     let persisted: Vec<_> = workspaces.values().cloned().collect();
@@ -472,15 +489,29 @@ fn normalize_path_key(path: &str) -> String {
     }
 }
 
+fn stale_worktree_ids_for_parent(
+    snapshot: &[WorkspaceEntry],
+    parent_id: &str,
+    listed_worktree_paths: &HashSet<String>,
+) -> Vec<String> {
+    snapshot
+        .iter()
+        .filter(|entry| entry.kind.is_worktree())
+        .filter(|entry| entry.parent_id.as_deref() == Some(parent_id))
+        .filter(|entry| !listed_worktree_paths.contains(&normalize_path_key(&entry.path)))
+        .map(|entry| entry.id.clone())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         lookup_codex_workspace_root_label, merge_codex_workspace_roots, normalize_path_key,
-        parse_git_worktree_list, should_replace_existing_name, CodexGlobalState, CodexThreadTitles,
-        GitWorktreeEntry,
+        parse_git_worktree_list, should_replace_existing_name, stale_worktree_ids_for_parent,
+        CodexGlobalState, CodexThreadTitles, GitWorktreeEntry,
     };
     use crate::types::{WorkspaceEntry, WorkspaceKind, WorkspaceSettings, WorktreeInfo};
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::path::Path;
 
     #[test]
@@ -643,5 +674,61 @@ detached
             state.workspace_root_labels.get("/tmp/worktrees/repo-123"),
             Some(&"User custom label".to_string())
         );
+    }
+
+    #[test]
+    fn stale_worktree_ids_for_parent_prunes_only_missing_children_for_same_parent() {
+        let snapshot = vec![
+            WorkspaceEntry {
+                id: "main".to_string(),
+                name: "Repo".to_string(),
+                path: "/tmp/repo".to_string(),
+                kind: WorkspaceKind::Main,
+                parent_id: None,
+                worktree: None,
+                settings: WorkspaceSettings::default(),
+            },
+            WorkspaceEntry {
+                id: "keep".to_string(),
+                name: "Keep".to_string(),
+                path: "/tmp/worktrees/keep".to_string(),
+                kind: WorkspaceKind::Worktree,
+                parent_id: Some("main".to_string()),
+                worktree: Some(WorktreeInfo {
+                    branch: "feature/keep".to_string(),
+                }),
+                settings: WorkspaceSettings::default(),
+            },
+            WorkspaceEntry {
+                id: "remove".to_string(),
+                name: "Remove".to_string(),
+                path: "/tmp/worktrees/remove".to_string(),
+                kind: WorkspaceKind::Worktree,
+                parent_id: Some("main".to_string()),
+                worktree: Some(WorktreeInfo {
+                    branch: "feature/remove".to_string(),
+                }),
+                settings: WorkspaceSettings::default(),
+            },
+            WorkspaceEntry {
+                id: "other-parent".to_string(),
+                name: "Other".to_string(),
+                path: "/tmp/worktrees/other-parent".to_string(),
+                kind: WorkspaceKind::Worktree,
+                parent_id: Some("other-main".to_string()),
+                worktree: Some(WorktreeInfo {
+                    branch: "feature/other".to_string(),
+                }),
+                settings: WorkspaceSettings::default(),
+            },
+        ];
+        let listed = HashSet::from([
+            normalize_path_key("/tmp/repo"),
+            normalize_path_key("/tmp/worktrees/keep"),
+        ]);
+
+        let stale = stale_worktree_ids_for_parent(&snapshot, "main", &listed);
+
+        assert_eq!(stale, vec!["remove".to_string()]);
     }
 }
