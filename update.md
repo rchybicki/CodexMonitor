@@ -166,14 +166,15 @@ npm run tauri:build:local
 Quit the currently running local app if it is open, then relaunch the rebuilt bundle:
 
 ```bash
-osascript -e 'tell application "Codex Monitor Dev" to quit' || true
-open "src-tauri/target/release/bundle/macos/Codex Monitor Dev.app"
+sh scripts/restart-local-dev-app.sh
 ```
 
 Quick verification:
 
 ```bash
 ls -lh "src-tauri/target/release/bundle/macos/Codex Monitor Dev.app"
+APP_EXEC="$(pwd)/src-tauri/target/release/bundle/macos/Codex Monitor Dev.app/Contents/MacOS/codex-monitor"
+pgrep -fl "$APP_EXEC"
 ```
 
 ## 6) Push Updated Branch to Fork (Only If Step 1 Has Changes)
